@@ -3,7 +3,6 @@ package fr.florian.radio
 import android.Manifest
 import android.content.ComponentName
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.LruCache
@@ -52,8 +51,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -83,6 +80,7 @@ class MainActivity : ComponentActivity() {
 
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
     private var favorites by mutableStateOf<List<Station>>(emptyList())
+    private var lastStation by mutableStateOf<Station?>(null)
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncState(player)
@@ -100,6 +98,7 @@ class MainActivity : ComponentActivity() {
 
         favorites = runCatching { RadioBrowser.parse(prefs.getString(FAVORITES_KEY, null) ?: "[]") }
             .getOrDefault(emptyList())
+        lastStation = LastStation.load(this)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -129,6 +128,8 @@ class MainActivity : ComponentActivity() {
             val c = runCatching { future.get() }.getOrNull() ?: return@addListener
             controller = c
             c.addListener(playerListener)
+            // Rien en cours : on prépare la barre de lecture avec la dernière station (sans la lancer)
+            if (c.mediaItemCount == 0) lastStation?.let { c.setMediaItem(it.toMediaItem()) }
             syncState(c)
         }, ContextCompat.getMainExecutor(this))
     }
@@ -161,25 +162,11 @@ class MainActivity : ComponentActivity() {
 
     private fun play(s: Station) {
         val c = controller ?: return
-        val uri = Uri.parse(s.url)
-        val item = MediaItem.Builder()
-            .setMediaId(s.uuid)
-            .setUri(uri)
-            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(s.name)
-                    .setArtist(s.subtitle)
-                    .setSubtitle(s.subtitle)
-                    .setArtworkUri(s.favicon?.let(Uri::parse))
-                    .setIsPlayable(true)
-                    .setIsBrowsable(false)
-                    .build()
-            )
-            .build()
-        c.setMediaItem(item)
+        c.setMediaItem(s.toMediaItem())
         c.prepare()
         c.play()
+        lastStation = s
+        LastStation.save(this, s)
         lifecycleScope.launch(Dispatchers.IO) { RadioBrowser.countClick(s.uuid) }
     }
 
@@ -257,7 +244,9 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(Unit) { load(query) }
 
-        val current = favorites.find { it.uuid == currentId } ?: stations.find { it.uuid == currentId }
+        val current = favorites.find { it.uuid == currentId }
+            ?: stations.find { it.uuid == currentId }
+            ?: lastStation?.takeIf { it.uuid == currentId }
 
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
