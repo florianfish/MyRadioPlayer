@@ -17,6 +17,22 @@ Depuis le téléphone, ouvrir la page **Releases** du dépôt, télécharger `Si
 
 Android 8.0 (API 26) minimum. Au premier lancement, autoriser les notifications (Android 13+) pour garder les contrôles de lecture.
 
+### Mises à jour automatiques avec Obtainium
+
+[Obtainium](https://github.com/ImranR98/Obtainium) suit les releases GitHub et installe les nouvelles versions. Chaque tag `v*` poussé arrive ainsi sur le téléphone.
+
+1. Installer Obtainium depuis ses releases GitHub (variante `arm64-v8a`), ou via F-Droid / IzzyOnDroid.
+2. **Si le dépôt est privé**, créer un token GitHub : Settings → Developer settings → Personal access tokens → **Fine-grained tokens** :
+   - *Repository access* : *Only select repositories* → `MyRadioPlayer`
+   - *Permissions* : *Contents* → **Read-only** (*Metadata* est ajouté automatiquement)
+   - *Expiration* : noter la date. Une fois le token expiré, Obtainium ne voit plus les mises à jour : il faut le régénérer et le recoller.
+
+   Dans Obtainium : Settings → section **GitHub** → coller le token.
+3. Onglet **Add App** → `https://github.com/florianfish/MyRadioPlayer` → **Add** (pré-releases décochées).
+4. Si l'app est déjà installée depuis une release, l'installer une fois depuis Obtainium : elle passe par-dessus sans perdre les favoris (même signature). Autoriser Obtainium à installer des applications quand Android le demande.
+
+Obtainium vérifie ensuite les releases en arrière-plan et notifie quand une nouvelle version est disponible.
+
 ## Build
 
 ### GitHub Actions
