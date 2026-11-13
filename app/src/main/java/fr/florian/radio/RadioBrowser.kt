@@ -1,6 +1,9 @@
 package fr.florian.radio
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,6 +25,17 @@ data class Station(
             tags.takeIf { it.isNotBlank() },
             if (bitrate > 0) "$bitrate kbps" else codec.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
+
+    /** Même format que l'API, pour être relu par [RadioBrowser.parse] (favoris). */
+    fun toJson(): JSONObject = JSONObject()
+        .put("stationuuid", uuid)
+        .put("name", name)
+        .put("url_resolved", url)
+        .put("favicon", favicon ?: "")
+        .put("countrycode", country)
+        .put("tags", tags)
+        .put("codec", codec)
+        .put("bitrate", bitrate)
 }
 
 /** Client minimal pour https://api.radio-browser.info */
@@ -46,6 +60,24 @@ object RadioBrowser {
         runCatching { get("/json/url/$uuid") }
     }
 
+    /** Télécharge un logo réduit à [size] px max ; null si format non décodable (svg, ico…). */
+    fun logo(url: String, size: Int = 144): Bitmap? {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.setRequestProperty("User-Agent", "SimpleRadio/1.0")
+        conn.connectTimeout = 5_000
+        conn.readTimeout = 8_000
+        try {
+            val bmp = conn.inputStream.use { BitmapFactory.decodeStream(it) } ?: return null
+            val scale = size.toFloat() / maxOf(bmp.width, bmp.height)
+            if (scale >= 1f) return bmp
+            return Bitmap.createScaledBitmap(
+                bmp, (bmp.width * scale).toInt().coerceAtLeast(1), (bmp.height * scale).toInt().coerceAtLeast(1), true,
+            )
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun get(path: String): String {
         var last: Exception? = null
         for (host in hosts) {
@@ -67,7 +99,7 @@ object RadioBrowser {
         throw last ?: IOException("Aucun serveur Radio Browser joignable")
     }
 
-    private fun parse(json: String): List<Station> {
+    fun parse(json: String): List<Station> {
         val arr = JSONArray(json)
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.getJSONObject(i)
