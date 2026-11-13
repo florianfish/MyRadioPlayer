@@ -8,7 +8,7 @@ SimpleRadio: minimal Android internet-radio player (Kotlin, Jetpack Compose, Med
 
 ## Build
 
-- No Gradle wrapper is committed: use a system `gradle` (8.9) with JDK 17 and Android SDK 34.
+- No Gradle wrapper is committed: use a system `gradle` (9.9.1) with JDK 17 and Android SDK 37 (compileSdk 37, targetSdk still 34). AGP 9 has built-in Kotlin: `org.jetbrains.kotlin.android` is only declared `apply false` in the root build to pin the Kotlin version, never applied in `:app`, and there is no `kotlinOptions` block (jvmTarget follows `compileOptions`).
 - `gradle assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
 - CI (`.github/workflows/build.yml`) runs the same command on every push to `main` and uploads the APK as the `simple-radio-apk` artifact.
 - Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which builds `assembleRelease` signed with a fixed key from repo secrets and attaches the APK to a GitHub Release. Signing, `versionName` (tag without the leading `v`) and `versionCode` (workflow run number) come from env vars read in `app/build.gradle.kts`, so a local `assembleRelease` without those vars fails at signing.

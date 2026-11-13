@@ -106,7 +106,7 @@ Un APK de debug et un APK de release ne sont pas signés avec la même clé : po
 
 ### En local
 
-Prérequis : JDK 17, Gradle 8.9 et Android SDK 34. Aucun wrapper Gradle n'est versionné, il faut donc utiliser un `gradle` installé sur la machine.
+Prérequis : JDK 17, Gradle 9.9.1 et Android SDK 37. Aucun wrapper Gradle n'est versionné, il faut donc utiliser un `gradle` installé sur la machine.
 
 ```bash
 gradle assembleDebug
