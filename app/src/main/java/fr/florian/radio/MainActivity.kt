@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -77,6 +78,7 @@ class MainActivity : ComponentActivity() {
     private var currentId by mutableStateOf<String?>(null)
     private var currentName by mutableStateOf<String?>(null)
     private var currentInfo by mutableStateOf<String?>(null)
+    private var currentTrack by mutableStateOf<String?>(null)
     private var currentArt by mutableStateOf<String?>(null)
 
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
@@ -145,7 +147,10 @@ class MainActivity : ComponentActivity() {
         val item = p.currentMediaItem
         currentId = item?.mediaId
         currentName = item?.mediaMetadata?.title?.toString()
-        currentInfo = item?.mediaMetadata?.artist?.toString()
+        val md = item?.mediaMetadata
+        currentInfo = md?.subtitle?.toString()
+        // `artist` vaut la description de la station, ou le morceau annoncé par le flux (cf. PlaybackService)
+        currentTrack = md?.artist?.toString()?.takeIf { it.isNotBlank() && it != currentInfo }
         currentArt = item?.mediaMetadata?.artworkUri?.toString()
     }
 
@@ -165,6 +170,7 @@ class MainActivity : ComponentActivity() {
                 MediaMetadata.Builder()
                     .setTitle(s.name)
                     .setArtist(s.subtitle)
+                    .setSubtitle(s.subtitle)
                     .setArtworkUri(s.favicon?.let(Uri::parse))
                     .setIsPlayable(true)
                     .setIsBrowsable(false)
@@ -190,7 +196,7 @@ class MainActivity : ComponentActivity() {
 
     private fun statusText(): String = when {
         isBuffering -> "Connexion…"
-        isPlaying -> listOfNotNull("En direct", currentInfo?.takeIf { it.isNotBlank() }).joinToString(" · ")
+        isPlaying -> currentTrack ?: listOfNotNull("En direct", currentInfo?.takeIf { it.isNotBlank() }).joinToString(" · ")
         else -> "Arrêté"
     }
 
@@ -484,12 +490,13 @@ private fun PlayerBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Défilement si le titre en cours est trop long
                 Text(
                     status,
                     style = MaterialTheme.typography.bodySmall,
                     color = LocalContentColor.current.copy(alpha = 0.75f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.basicMarquee(),
                 )
             }
             // null : station inconnue de l'écran (ex. relancée depuis la notification), on ne peut pas l'enregistrer

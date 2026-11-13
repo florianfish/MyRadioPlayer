@@ -8,6 +8,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Favoris** : un cœur sur chaque station pour l'ajouter ou la retirer, avec « Annuler » après un retrait. Les favoris sont stockés sur le téléphone et s'affichent même hors ligne.
 - **Lecture en arrière-plan** : notification média, contrôles sur l'écran de verrouillage et depuis les écouteurs Bluetooth. La lecture se met en pause quand les écouteurs sont débranchés.
 - **Direct** : « Arrêter » coupe le flux au lieu de le mettre en pause, pour reprendre au direct à la relance.
+- **Titre en cours** : quand la radio l'annonce dans son flux, le morceau diffusé s'affiche dans la barre de lecture, la notification et sur l'écran de verrouillage.
 - **Logos des stations**, thème clair/sombre et couleurs Material You (Android 12+).
 - Flux MP3, AAC et HLS (`.m3u8`), en HTTP comme en HTTPS.
 
