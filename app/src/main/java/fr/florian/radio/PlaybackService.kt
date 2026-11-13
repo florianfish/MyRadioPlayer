@@ -77,6 +77,7 @@ class PlaybackService : MediaSessionService() {
                 override fun onPlaybackResumption(
                     mediaSession: MediaSession,
                     controller: MediaSession.ControllerInfo,
+                    isForPlayback: Boolean,
                 ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
                     val station = LastStation.load(this@PlaybackService)
                         ?: return Futures.immediateFailedFuture(IllegalStateException("Aucune station mémorisée"))
