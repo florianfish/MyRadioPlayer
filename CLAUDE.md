@@ -12,6 +12,12 @@ SimpleRadio: minimal Android internet-radio player (Kotlin, Jetpack Compose, Med
 - `gradle assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
 - CI (`.github/workflows/build.yml`) runs the same command on every push to `main` and uploads the APK as the `simple-radio-apk` artifact.
 - Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which builds `assembleRelease` signed with a fixed key from repo secrets and attaches the APK to a GitHub Release. Signing, `versionName` (tag without the leading `v`) and `versionCode` (workflow run number) come from env vars read in `app/build.gradle.kts`, so a local `assembleRelease` without those vars fails at signing.
+- Release procedure (full user-facing version in the README, "Publier une version"):
+  - Tag must start with `v` (`git tag v1.1 && git push origin v1.1`). A tag like `1.0.0`, or a release created by hand in the GitHub UI, triggers nothing and has no APK.
+  - Required repo secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. `KEY_ALIAS` must match the alias inside the keystore exactly (`simpleradio`), otherwise "Build signed APK" fails.
+  - To retry a failed release: "Re-run jobs" on the run, or delete and re-push the tag (`git push origin :refs/tags/vX` then `git push origin vX`).
+  - Keystore generation without a JDK: OpenSSL `req -x509` + `pkcs12 -export -name simpleradio`. The resulting PKCS12 file works as `.jks`.
+  - Debug and release APKs are signed with different keys. Switching a phone from a debug build to the first release requires uninstalling the app first; later releases update in place as long as the same keystore is used.
 - There are no tests and no lint config.
 
 ## Architecture
