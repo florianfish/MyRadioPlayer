@@ -29,3 +29,5 @@ Single module `:app`, package `fr.florian.radio`, three files:
 - `MainActivity.kt` — whole Compose UI. Talks to the service only through a `MediaController` connected in `onStart` / released in `onStop`; player state is mirrored into Compose state via `syncState`. Live radio: the play/pause button calls `stop()` (not `pause()`) so resuming restarts at the live edge.
 
 Cleartext HTTP is allowed in the manifest (`usesCleartextTraffic`) since many streams are plain HTTP.
+
+Version label: debug builds get a `-debug` versionName suffix, plus `.<GITHUB_RUN_NUMBER>` on CI. `buildConfig` is enabled so the UI shows `BuildConfig.VERSION_NAME` next to the title.
