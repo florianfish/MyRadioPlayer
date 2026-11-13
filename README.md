@@ -13,9 +13,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 
 ## Installation
 
-1. Ouvrir l'onglet **Actions** du dépôt et choisir la dernière exécution réussie du workflow **Build APK**.
-2. Télécharger l'artefact `simple-radio-apk` puis extraire `app-debug.apk`.
-3. Installer l'APK sur le téléphone en autorisant les sources inconnues.
+Depuis le téléphone, ouvrir la page **Releases** du dépôt, télécharger `SimpleRadio-vX.Y.apk` de la dernière version, puis l'installer en autorisant les sources inconnues. Les versions suivantes s'installent par-dessus, sans perdre les favoris.
 
 Android 8.0 (API 26) minimum. Au premier lancement, autoriser les notifications (Android 13+) pour garder les contrôles de lecture.
 
@@ -23,7 +21,38 @@ Android 8.0 (API 26) minimum. Au premier lancement, autoriser les notifications 
 
 ### GitHub Actions
 
-Le workflow `.github/workflows/build.yml` compile l'APK de debug à chaque push sur `main`. On peut aussi le lancer manuellement avec **Run workflow**.
+- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` (artefact `simple-radio-apk`, ou lancement manuel avec **Run workflow**). Ces APK sont signés avec une clé différente à chaque build : ils servent à tester, pas à mettre à jour l'application installée.
+- `.github/workflows/release.yml` publie une **Release** avec l'APK signé à chaque tag `v*`.
+
+### Publier une version
+
+```bash
+git tag v1.1
+git push origin v1.1
+```
+
+Le nom de version vient du tag (`1.1`) et le `versionCode` du numéro d'exécution du workflow, qui augmente toujours.
+
+### Clé de signature (une seule fois)
+
+Toutes les releases doivent être signées avec la même clé, sinon Android refuse la mise à jour.
+
+```bash
+keytool -genkeypair -v -keystore simpleradio.jks -alias simpleradio \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 simpleradio.jks   # contenu du secret KEYSTORE_BASE64
+```
+
+Dans **Settings → Secrets and variables → Actions** du dépôt, créer :
+
+| Secret | Valeur |
+|---|---|
+| `KEYSTORE_BASE64` | Sortie de `base64 -w0 simpleradio.jks` |
+| `KEYSTORE_PASSWORD` | Mot de passe du keystore |
+| `KEY_ALIAS` | `simpleradio` |
+| `KEY_PASSWORD` | Mot de passe de la clé (le même que le keystore si `keytool` ne l'a pas demandé) |
+
+Garder `simpleradio.jks` et ses mots de passe en lieu sûr, hors du dépôt (`*.jks` est ignoré par git). Si la clé est perdue, la version suivante ne pourra pas s'installer par-dessus l'ancienne.
 
 ### En local
 
@@ -62,7 +91,6 @@ Le trafic HTTP non chiffré est autorisé, car beaucoup de flux radio ne sont pa
 - Pas de réorganisation des favoris : ils apparaissent dans l'ordre d'ajout.
 - Les logos sont gardés en mémoire seulement le temps de la session. Les formats SVG et ICO ne s'affichent pas.
 - Une station relancée depuis la notification, si elle n'apparaît dans aucune liste, ne peut pas être ajoutée aux favoris depuis le lecteur.
-- APK de debug uniquement, sans signature de release.
 
 ## Crédits
 
