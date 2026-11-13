@@ -9,6 +9,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Lecture en arrière-plan** : notification média, contrôles sur l'écran de verrouillage et depuis les écouteurs Bluetooth. La lecture se met en pause quand les écouteurs sont débranchés.
 - **Direct** : « Arrêter » coupe le flux au lieu de le mettre en pause, pour reprendre au direct à la relance.
 - **Logos des stations**, thème clair/sombre et couleurs Material You (Android 12+).
+- **Numéro de version** affiché en petit à côté du titre : `v1.1` pour une release, `v1.0-debug.N` pour un APK de test (N = numéro du run GitHub Actions).
 - Flux MP3, AAC et HLS (`.m3u8`), en HTTP comme en HTTPS.
 
 ## Installation

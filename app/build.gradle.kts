@@ -24,13 +24,18 @@ android {
         }
     }
     buildTypes {
+        // APK de test : suffixe pour ne pas le confondre avec une release, + n° du run CI quand il existe
+        debug { versionNameSuffix = "-debug" + (System.getenv("GITHUB_RUN_NUMBER")?.let { ".$it" } ?: "") }
         release { signingConfig = signingConfigs.getByName("release") }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true // BuildConfig.VERSION_NAME, affiché à côté du titre
+    }
 }
 
 dependencies {
