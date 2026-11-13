@@ -13,7 +13,8 @@ SimpleRadio: minimal Android internet-radio player (Kotlin, Jetpack Compose, Med
 - CI (`.github/workflows/build.yml`) runs the same command on every push to `main` and uploads the APK as the `simple-radio-apk` artifact.
 - Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which builds `assembleRelease` signed with a fixed key from repo secrets and attaches the APK to a GitHub Release. Signing, `versionName` (tag without the leading `v`) and `versionCode` (workflow run number) come from env vars read in `app/build.gradle.kts`, so a local `assembleRelease` without those vars fails at signing.
 - Release procedure (full user-facing version in the README, "Publier une version"):
-  - Tag must start with `v` (`git tag v1.1 && git push origin v1.1`). A tag like `1.0.0`, or a release created by hand in the GitHub UI, triggers nothing and has no APK.
+  - Tag must start with `v` (`git tag v1.1 && git push origin v1.1`). A tag like `1.0.0` triggers nothing.
+  - A release published from the GitHub UI with a new `v*` tag also works: creating the tag fires the workflow, whose publish step uploads the APK to the existing release (`gh release upload --clobber`) instead of creating it. A release on a tag that already existed triggers nothing.
   - Required repo secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. `KEY_ALIAS` must match the alias inside the keystore exactly (`simpleradio`), otherwise "Build signed APK" fails.
   - To retry a failed release: "Re-run jobs" on the run, or delete and re-push the tag (`git push origin :refs/tags/vX` then `git push origin vX`).
   - Keystore generation without a JDK: OpenSSL `req -x509` + `pkcs12 -export -name simpleradio`. The resulting PKCS12 file works as `.jks`.

@@ -50,7 +50,8 @@ git push origin v1.1
 
 Le nom de version vient du tag (`1.1`) et le `versionCode` du numéro d'exécution du workflow, qui augmente toujours.
 
-- Le tag **doit commencer par `v`** : un tag `1.1` ou une release créée à la main depuis l'interface GitHub ne déclenche aucun build.
+- Le tag **doit commencer par `v`** : un tag `1.1` ne déclenche aucun build.
+- Depuis l'interface GitHub (sans ordinateur) : **Releases** → **Draft a new release** → **Choose a tag**, taper `v1.1` puis **Create new tag: v1.1 on publish** sur `main` → **Publish release**. La création du tag lance le workflow, qui ajoute l'APK à cette release.
 - Suivre l'exécution dans l'onglet **Actions** (workflow « Release APK ») ; une fois terminé, l'APK `SimpleRadio-v1.1.apk` est attaché à la release.
 - Si le build échoue (secret manquant ou erroné…), corriger puis relancer avec **Re-run jobs** sur l'exécution, ou repousser le tag :
 
