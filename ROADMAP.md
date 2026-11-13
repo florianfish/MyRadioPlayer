@@ -4,7 +4,7 @@ Idées de fonctionnalités pour SimpleRadio, classées par rapport intérêt / e
 
 ## Prioritaire
 
-### 1. Titre en cours (métadonnées ICY)
+### 1. Titre en cours (métadonnées ICY) — ✅ fait
 Beaucoup de flux diffusent « artiste – titre » dans leurs métadonnées ICY. Aujourd'hui, la barre de lecture et la notification n'affichent que le pays, les tags et le débit de la station.
 - Écouter `onMediaMetadataChanged` / lire `player.mediaMetadata` (ExoPlayer y place déjà les infos ICY) et l'afficher dans `PlayerBar`.
 - Faire remonter ce titre dans la notification et sur l'écran de verrouillage.

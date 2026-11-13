@@ -8,6 +8,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Favoris** : un cœur sur chaque station pour l'ajouter ou la retirer, avec « Annuler » après un retrait. Les favoris sont stockés sur le téléphone et s'affichent même hors ligne.
 - **Lecture en arrière-plan** : notification média, contrôles sur l'écran de verrouillage et depuis les écouteurs Bluetooth. La lecture se met en pause quand les écouteurs sont débranchés.
 - **Direct** : « Arrêter » coupe le flux au lieu de le mettre en pause, pour reprendre au direct à la relance.
+- **Titre en cours** : quand la radio l'annonce dans son flux, le morceau diffusé s'affiche dans la barre de lecture, la notification et sur l'écran de verrouillage.
 - **Logos des stations**, thème clair/sombre et couleurs Material You (Android 12+).
 - **Numéro de version** affiché en petit à côté du titre : `v1.1` pour une release, `v1.0-debug.N` pour un APK de test (N = numéro du run GitHub Actions).
 - Flux MP3, AAC et HLS (`.m3u8`), en HTTP comme en HTTPS.
@@ -38,7 +39,7 @@ Obtainium vérifie ensuite les releases en arrière-plan et notifie quand une no
 
 ### GitHub Actions
 
-- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` (artefact `simple-radio-apk`, ou lancement manuel avec **Run workflow**). Ces APK sont signés avec une clé différente à chaque build : ils servent à tester, pas à mettre à jour l'application installée.
+- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` et sur chaque pull request (artefact `simple-radio-apk`, ou lancement manuel avec **Run workflow**). Sur une pull request, un commentaire donne le lien de téléchargement de l'APK, mis à jour à chaque nouveau commit. Ces APK sont signés avec une clé différente à chaque build : ils servent à tester, pas à mettre à jour l'application installée.
 - `.github/workflows/release.yml` publie une **Release** avec l'APK signé à chaque tag `v*`.
 
 ### Publier une version
