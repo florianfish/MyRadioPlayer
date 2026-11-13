@@ -3,11 +3,15 @@ name: Build APK
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -19,6 +23,21 @@ jobs:
           gradle-version: "9.9.1"
       - run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v7
+        id: apk
         with:
           name: simple-radio-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+      # Sur une PR : commentaire avec le lien de l'APK de debug, mis à jour à chaque push
+      - name: Lien de l'APK dans la PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.apk.outputs.artifact-url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          body="📦 **APK de debug** (commit ${SHA:0:7}) : [télécharger simple-radio-apk]($URL)
+
+          Fichier zip à décompresser ; lien valable 90 jours, connexion GitHub requise."
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --edit-last --create-if-none --body "$body" \
+            || gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "$body"
