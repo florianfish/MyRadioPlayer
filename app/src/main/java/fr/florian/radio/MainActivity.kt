@@ -277,7 +277,7 @@ class MainActivity : ComponentActivity() {
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
                 )
-                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                     Tab(
                         selected = tab == TAB_FAVORITES,
                         onClick = { tab = TAB_FAVORITES },
