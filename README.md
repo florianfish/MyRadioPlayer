@@ -33,26 +33,60 @@ git push origin v1.1
 
 Le nom de version vient du tag (`1.1`) et le `versionCode` du numéro d'exécution du workflow, qui augmente toujours.
 
+- Le tag **doit commencer par `v`** : un tag `1.1` ou une release créée à la main depuis l'interface GitHub ne déclenche aucun build.
+- Suivre l'exécution dans l'onglet **Actions** (workflow « Release APK ») ; une fois terminé, l'APK `SimpleRadio-v1.1.apk` est attaché à la release.
+- Si le build échoue (secret manquant ou erroné…), corriger puis relancer avec **Re-run jobs** sur l'exécution, ou repousser le tag :
+
+  ```bash
+  git push origin :refs/tags/v1.1   # supprime le tag distant
+  git push origin v1.1              # le repousse, ce qui relance le workflow
+  ```
+
 ### Clé de signature (une seule fois)
 
 Toutes les releases doivent être signées avec la même clé, sinon Android refuse la mise à jour.
 
+Avec un JDK installé (`keytool`) :
+
 ```bash
 keytool -genkeypair -v -keystore simpleradio.jks -alias simpleradio \
   -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 simpleradio.jks   # contenu du secret KEYSTORE_BASE64
+```
+
+Sans JDK, avec OpenSSL (fourni avec Git pour Windows : `C:\Program Files\Git\mingw64\bin\openssl.exe`) :
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 10000 -subj "/CN=SimpleRadio"
+openssl pkcs12 -export -inkey key.pem -in cert.pem -name simpleradio -out simpleradio.jks
+rm key.pem cert.pem
+```
+
+Le fichier obtenu est au format PKCS12, lu sans problème par Gradle malgré l'extension `.jks`. Le mot de passe de la clé est alors le même que celui du keystore.
+
+Encoder ensuite le keystore en base64 :
+
+```bash
+base64 -w0 simpleradio.jks   # Linux / Git Bash
+```
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\simpleradio.jks")) | Set-Clipboard   # PowerShell
 ```
 
 Dans **Settings → Secrets and variables → Actions** du dépôt, créer :
 
 | Secret | Valeur |
 |---|---|
-| `KEYSTORE_BASE64` | Sortie de `base64 -w0 simpleradio.jks` |
+| `KEYSTORE_BASE64` | Keystore encodé en base64 |
 | `KEYSTORE_PASSWORD` | Mot de passe du keystore |
-| `KEY_ALIAS` | `simpleradio` |
+| `KEY_ALIAS` | `simpleradio` — doit être exactement l'alias donné à la clé (`-alias` / `-name`), sinon la signature échoue |
 | `KEY_PASSWORD` | Mot de passe de la clé (le même que le keystore si `keytool` ne l'a pas demandé) |
 
 Garder `simpleradio.jks` et ses mots de passe en lieu sûr, hors du dépôt (`*.jks` est ignoré par git). Si la clé est perdue, la version suivante ne pourra pas s'installer par-dessus l'ancienne.
+
+### Passer d'un APK de debug à une release
+
+Un APK de debug et un APK de release ne sont pas signés avec la même clé : pour installer la première release sur un téléphone qui a une version de debug, il faut d'abord désinstaller l'application (les favoris sont perdus). Ensuite, les releases successives s'installent par-dessus. Ne pas réinstaller un APK de debug par-dessus une release, pour la même raison.
 
 ### En local
 
