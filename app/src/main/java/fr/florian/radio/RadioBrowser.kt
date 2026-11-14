@@ -32,15 +32,21 @@ data class Station(
 
     /**
      * Adresses à essayer pour le logo : celui de l'annuaire, puis les icônes du site de la radio
-     * (souvent présentes quand le favicon de l'annuaire est vide ou cassé).
+     * (souvent présentes quand le favicon de l'annuaire est vide ou cassé), et en dernier recours
+     * le service d'icônes de Google, qui contourne les sites refusant les applis.
      */
     val logoUrls: List<String>
         get() {
-            val site = homepage?.let { runCatching { URL(it) }.getOrNull() }
-                ?.takeIf { it.host.isNotBlank() }
-                ?.let { "${it.protocol}://${it.host}" }
-            return listOfNotNull(favicon, site?.let { "$it/apple-touch-icon.png" }, site?.let { "$it/favicon.ico" })
-                .distinct()
+            val site = homepage?.let { runCatching { URL(it) }.getOrNull() }?.takeIf { it.host.isNotBlank() }
+            val origin = site?.let { "${it.protocol}://${it.host}" }
+            // Sans site connu, le domaine du favicon fait l'affaire (souvent celui de la radio)
+            val domain = (site ?: favicon?.let { runCatching { URL(it) }.getOrNull() })?.host?.takeIf { it.isNotBlank() }
+            return listOfNotNull(
+                favicon,
+                origin?.let { "$it/apple-touch-icon.png" },
+                origin?.let { "$it/favicon.ico" },
+                domain?.let { "https://www.google.com/s2/favicons?domain=$it&sz=128" },
+            ).distinct()
         }
 
     /** Même format que l'API, pour être relu par [RadioBrowser.parse] (favoris). */
@@ -124,7 +130,9 @@ object RadioBrowser {
         var target = URL(url)
         repeat(5) {
             val conn = target.openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", "SimpleRadio/1.0")
+            // Agent de navigateur : certains sites (CDN anti-robots) refusent les autres
+            conn.setRequestProperty("User-Agent", BROWSER_USER_AGENT)
+            conn.setRequestProperty("Accept", "image/*,*/*;q=0.8")
             conn.instanceFollowRedirects = false
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
@@ -148,6 +156,8 @@ object RadioBrowser {
     }
 
     private const val MAX_LOGO_BYTES = 2 * 1024 * 1024
+    private const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
 
     private fun decodeLogo(bytes: ByteArray, type: String, size: Int): Bitmap? {
         val head = String(bytes, 0, minOf(bytes.size, 256), Charsets.UTF_8).trimStart().lowercase()

@@ -432,14 +432,28 @@ private fun EmptyFavorites(onDiscover: () -> Unit) {
 private val logoCache = LruCache<String, ImageBitmap>(200)
 private val failedLogos = HashSet<String>()
 
-/** Logo de la station : essaie chaque adresse de [urls] dans l'ordre, sinon initiale du nom. */
+/** En dessous, l'image est floue une fois agrandie : on cherche mieux parmi les adresses suivantes. */
+private const val SHARP_LOGO_PX = 64
+
+/**
+ * Logo de la station : première image nette parmi [urls] (dans l'ordre), sinon la plus grande
+ * trouvée, sinon l'initiale du nom.
+ */
 @Composable
 private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
     val key = urls.joinToString("|")
     val logo by produceState(logoCache.get(key), key) {
+        // produceState garde l'ancienne valeur quand la clé change (barre de lecture : changement de station)
+        value = logoCache.get(key)
         if (value == null && urls.isNotEmpty() && key !in failedLogos) {
             val image = withContext(Dispatchers.IO) {
-                urls.firstNotNullOfOrNull { url -> runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull() }
+                var best: ImageBitmap? = null
+                for (url in urls) {
+                    val img = runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull() ?: continue
+                    if (maxOf(img.width, img.height) >= SHARP_LOGO_PX) return@withContext img
+                    if (best == null || img.width > best.width) best = img
+                }
+                best
             }
             if (image != null) {
                 logoCache.put(key, image)
