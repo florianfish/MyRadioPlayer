@@ -11,6 +11,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Dernière station** : à l'ouverture, la barre de lecture propose la dernière radio écoutée. Le bouton lecture du casque Bluetooth, de la voiture ou de la carte média d'Android la relance même appli fermée.
 - **Écran de lecture** : toucher la barre de lecture ou la glisser vers le haut ouvre la lecture en grand, avec la pochette du morceau (recherchée sur iTunes quand la radio annonce « artiste - titre ») ou à défaut le logo de la station, et un curseur de volume.
 - **Google Cast** : bouton Cast dans l'en-tête et l'écran de lecture pour diffuser la radio sur un Chromecast, une enceinte Google/Nest ou une TV compatible (récepteur standard de Google). Le curseur règle alors le volume de l'appareil.
+- **Minuteur de sommeil** : depuis l'écran de lecture, arrêt après 15, 30, 45, 60 ou 90 min, avec baisse progressive du son ; temps restant affiché, fonctionne écran éteint.
 - **Titre en cours** : quand la radio l'annonce dans son flux, le morceau diffusé s'affiche dans la barre de lecture, la notification et sur l'écran de verrouillage.
 - **Tags lisibles** : sous chaque station, au plus deux genres en français, sans les formats techniques de l'annuaire (« Info, Service public » plutôt que « aac, information, public radio »).
 - **Logos des stations** (PNG, JPEG, WebP, ICO et SVG ; à défaut, icône du site de la radio ou service d'icônes de Google), thème clair/sombre et couleurs Material You (Android 12+).

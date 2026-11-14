@@ -31,6 +31,8 @@ import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -38,6 +40,30 @@ import com.google.common.util.concurrent.ListenableFuture
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+
+    // Minuteur de sommeil (cf. setSleepTimer) : heure d'arrêt, 0 si aucun
+    private val timerHandler = Handler(Looper.getMainLooper())
+    private var sleepAt = 0L
+
+    /** Programme l'arrêt dans [minutes] (0 : annule), et publie l'heure d'arrêt dans les extras de session. */
+    private fun setSleepTimer(minutes: Int) {
+        timerHandler.removeCallbacksAndMessages(null)
+        session?.player?.let { if (it.isCommandAvailable(Player.COMMAND_SET_VOLUME)) it.volume = 1f }
+        sleepAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else 0L
+        if (minutes > 0) timerHandler.postDelayed({ fadeOut(0) }, minutes * 60_000L - FADE_MS)
+        session?.setSessionExtras(Bundle().apply { putLong(EXTRA_SLEEP_AT, sleepAt) })
+    }
+
+    /** Baisse progressive du son sur les dernières secondes, puis arrêt. */
+    private fun fadeOut(step: Int) {
+        val p = session?.player ?: return
+        if (step < FADE_STEPS && p.isCommandAvailable(Player.COMMAND_SET_VOLUME)) {
+            p.volume = 1f - (step + 1f) / FADE_STEPS
+            timerHandler.postDelayed({ fadeOut(step + 1) }, FADE_MS / FADE_STEPS)
+        } else {
+            p.stop() // déclenche aussi l'annulation du minuteur (lecteur à l'arrêt)
+        }
+    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -111,8 +137,42 @@ class PlaybackService : MediaSessionService() {
                         MediaSession.MediaItemsWithStartPosition(listOf(station.toMediaItem()), 0, C.TIME_UNSET)
                     )
                 }
+
+                // Commande du minuteur de sommeil, en plus des commandes standard
+                override fun onConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                ): MediaSession.ConnectionResult {
+                    val default = super.onConnect(session, controller)
+                    return MediaSession.ConnectionResult.accept(
+                        default.availableSessionCommands.buildUpon()
+                            .add(SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY))
+                            .build(),
+                        default.availablePlayerCommands,
+                    )
+                }
+
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle,
+                ): ListenableFuture<SessionResult> {
+                    if (customCommand.customAction != ACTION_SLEEP_TIMER) {
+                        return super.onCustomCommand(session, controller, customCommand, args)
+                    }
+                    setSleepTimer(args.getInt(EXTRA_SLEEP_MINUTES))
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             })
             .build()
+
+        // Radio arrêtée (bouton, fin du minuteur…) : le minuteur n'a plus lieu d'être
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_IDLE && player.playerError == null && sleepAt > 0) setSleepTimer(0)
+            }
+        })
     }
 
     private var resumeOnNetwork: ResumeOnNetwork? = null
@@ -136,6 +196,7 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         session = null
+        timerHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 }
@@ -172,6 +233,13 @@ fun Station.toMediaItem(): MediaItem {
 }
 
 private const val MIME_EXTRA = "mime"
+
+/** Minuteur de sommeil : commande de session (durée en minutes, 0 = annuler) et heure d'arrêt publiée. */
+const val ACTION_SLEEP_TIMER = "fr.florian.radio.SLEEP_TIMER"
+const val EXTRA_SLEEP_MINUTES = "minutes"
+const val EXTRA_SLEEP_AT = "sleep_at"
+private const val FADE_MS = 10_000L
+private const val FADE_STEPS = 20
 
 /**
  * Type MIME du flux : le récepteur Cast en a besoin pour le lire. Localement, seul le HLS
