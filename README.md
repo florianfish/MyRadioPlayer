@@ -9,6 +9,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Lecture en arrière-plan** : notification média, contrôles sur l'écran de verrouillage et depuis les écouteurs Bluetooth. Après une coupure réseau (tunnel, passage Wi-Fi ↔ 4G), la lecture se reconnecte seule. La lecture se met en pause quand les écouteurs sont débranchés, et s'arrête quand on ferme l'appli depuis les applis récentes.
 - **Direct** : « Arrêter » coupe le flux au lieu de le mettre en pause, pour reprendre au direct à la relance.
 - **Dernière station** : à l'ouverture, la barre de lecture propose la dernière radio écoutée. Le bouton lecture du casque Bluetooth, de la voiture ou de la carte média d'Android la relance même appli fermée.
+- **Ordre des favoris** : bouton « Réorganiser » dans l'onglet Favoris, puis glisser la poignée d'une station pour la déplacer.
 - **Écran de lecture** : toucher la barre de lecture ou la glisser vers le haut ouvre la lecture en grand, avec la pochette du morceau (recherchée sur iTunes quand la radio annonce « artiste - titre ») ou à défaut le logo de la station, et un curseur de volume.
 - **Google Cast** : bouton Cast dans l'en-tête et l'écran de lecture pour diffuser la radio sur un Chromecast, une enceinte Google/Nest ou une TV compatible (récepteur standard de Google). Le curseur règle alors le volume de l'appareil.
 - **Titre en cours** : quand la radio l'annonce dans son flux, le morceau diffusé s'affiche dans la barre de lecture, la notification et sur l'écran de verrouillage.

@@ -34,3 +34,5 @@ Cleartext HTTP is allowed in the manifest (`usesCleartextTraffic`) since many st
 Network drops: `PatientRetryPolicy` (load error policy, 10 retries, 1→15 s backoff, no retry on 4xx) keeps the player buffering ~1.5 min instead of failing; if it still fails with a `NETWORK_ERRORS` code, `ResumeOnNetwork` (in `PlaybackService.kt`) calls `prepare()` when the default network comes back, only if `playWhenReady`. The UI shows « Reconnexion… » (buffering after having played this item) and « En attente du réseau… ».
 
 Version label: debug builds get a `-debug` versionName suffix, plus `.<GITHUB_RUN_NUMBER>` on CI. `buildConfig` is enabled so the UI shows `BuildConfig.VERSION_NAME` next to the title.
+
+Favorites reorder mode: `ReorderList` (non-lazy `Column` with per-row drag handles, swaps past half a row) saves on each swap via `moveFavorite`.
