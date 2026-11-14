@@ -49,6 +49,8 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            // Volume du téléphone pilotable depuis l'appli (curseur de l'écran de lecture)
+            .setDeviceVolumeControlEnabled(true)
             .build()
         player.addListener(NowPlayingListener(player))
 
