@@ -91,9 +91,14 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
+    /**
+     * Appli fermée (balayée depuis les applis récentes) : on coupe la radio et le service.
+     * La lecture continue en revanche écran éteint ou dans une autre appli ; la dernière
+     * station reste mémorisée pour la reprise (casque, voiture, carte média).
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val p = session?.player
-        if (p == null || !p.playWhenReady || p.mediaItemCount == 0) stopSelf()
+        session?.player?.stop()
+        stopSelf()
     }
 
     override fun onDestroy() {
