@@ -17,6 +17,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -26,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -50,6 +53,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -234,6 +240,12 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putString(FAVORITES_KEY, JSONArray(list.map { it.toJson() }).toString()).apply()
     }
 
+    /** Déplace un favori (mode réorganisation) ; l'ordre est enregistré aussitôt. */
+    private fun moveFavorite(from: Int, to: Int) {
+        if (from !in favorites.indices || to !in favorites.indices) return
+        saveFavorites(favorites.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
     private fun play(s: Station) {
         val c = controller ?: return
         c.setMediaItem(s.toMediaItem())
@@ -409,7 +421,22 @@ class MainActivity : ComponentActivity() {
                     if (favorites.isEmpty()) {
                         EmptyFavorites { tab = TAB_DISCOVER }
                     } else {
-                        StationList(favorites, currentId, favoriteIds, ::onStationClick, ::toggleFavorite)
+                        var reordering by rememberSaveable { mutableStateOf(false) }
+                        Column {
+                            if (favorites.size > 1) {
+                                TextButton(
+                                    onClick = { reordering = !reordering },
+                                    modifier = Modifier.align(Alignment.End).padding(end = 8.dp),
+                                ) {
+                                    Text(if (reordering) "Terminé" else "Réorganiser")
+                                }
+                            }
+                            if (reordering && favorites.size > 1) {
+                                ReorderList(favorites, currentId, ::moveFavorite)
+                            } else {
+                                StationList(favorites, currentId, favoriteIds, ::onStationClick, ::toggleFavorite)
+                            }
+                        }
                     }
                 } else {
                     OutlinedTextField(
@@ -540,6 +567,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+/**
+ * Favoris en mode réorganisation : glisser la poignée d'une station pour la déplacer.
+ * [onMove] est appelé à chaque échange de place, la liste reçue en retour est déjà réordonnée.
+ */
+@Composable
+private fun ReorderList(list: List<Station>, currentId: String?, onMove: (from: Int, to: Int) -> Unit) {
+    val currentList by rememberUpdatedState(list)
+    val move by rememberUpdatedState(onMove)
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    var rowHeight by remember { mutableIntStateOf(1) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        list.forEach { s ->
+            key(s.uuid) {
+                val dragged = draggedId == s.uuid
+                ListItem(
+                    modifier = Modifier
+                        .onSizeChanged { rowHeight = it.height.coerceAtLeast(1) }
+                        .zIndex(if (dragged) 1f else 0f)
+                        .graphicsLayer { translationY = if (dragged) offset else 0f }
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (dragged) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                    ),
+                    leadingContent = { StationLogo(s.name, s.logoUrls) },
+                    headlineContent = {
+                        Text(
+                            s.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (s.uuid == currentId) FontWeight.SemiBold else null,
+                        )
+                    },
+                    supportingContent = { Text(s.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = {
+                        Icon(
+                            DragHandleIcon,
+                            contentDescription = "Déplacer ${s.name}",
+                            modifier = Modifier
+                                .size(48.dp)
+                                .pointerInput(s.uuid) {
+                                    detectDragGestures(
+                                        onDragStart = { draggedId = s.uuid; offset = 0f },
+                                        onDragEnd = { draggedId = null; offset = 0f },
+                                        onDragCancel = { draggedId = null; offset = 0f },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        offset += amount.y
+                                        // Au-delà d'une demi-ligne, la station échange sa place avec sa voisine
+                                        val i = currentList.indexOfFirst { it.uuid == s.uuid }
+                                        if (offset > rowHeight / 2f && i in 0 until currentList.lastIndex) {
+                                            move(i, i + 1)
+                                            offset -= rowHeight
+                                        } else if (offset < -rowHeight / 2f && i > 0) {
+                                            move(i, i - 1)
+                                            offset += rowHeight
+                                        }
+                                    }
+                                }
+                                .padding(12.dp),
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+private val DragHandleIcon by lazy { vectorIcon("DragHandle", "M20,9H4v2h16V9zM4,15h16v-2H4V15z") }
 
 /** Titre de la liste : critères actifs et nombre de radios. */
 private fun header(s: Criteria, count: Int, loading: Boolean): String {
