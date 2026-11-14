@@ -86,6 +86,11 @@ class MainActivity : ComponentActivity() {
 
     private var isPlaying by mutableStateOf(false)
     private var isBuffering by mutableStateOf(false)
+    /** Retombé en chargement après avoir joué : coupure réseau, le lecteur réessaie. */
+    private var reconnecting by mutableStateOf(false)
+    /** Tentatives épuisées : la lecture reprendra au retour du réseau (cf. PlaybackService). */
+    private var waitingNetwork by mutableStateOf(false)
+    private var playedId: String? = null
     private var currentId by mutableStateOf<String?>(null)
     private var currentName by mutableStateOf<String?>(null)
     private var currentInfo by mutableStateOf<String?>(null)
@@ -103,7 +108,12 @@ class MainActivity : ComponentActivity() {
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncState(player)
         override fun onPlayerError(error: PlaybackException) {
-            Toast.makeText(this@MainActivity, "Impossible de lire ce flux", Toast.LENGTH_SHORT).show()
+            val message = if (error.errorCode in NETWORK_ERRORS) {
+                "Connexion perdue : la radio reprendra au retour du réseau"
+            } else {
+                "Impossible de lire ce flux"
+            }
+            Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -163,6 +173,15 @@ class MainActivity : ComponentActivity() {
     private fun syncState(p: Player) {
         isPlaying = p.isPlaying
         isBuffering = p.playbackState == Player.STATE_BUFFERING
+        if (p.isPlaying) {
+            playedId = p.currentMediaItem?.mediaId
+        } else if (p.playbackState == Player.STATE_IDLE && p.playerError == null || p.currentMediaItem?.mediaId != playedId) {
+            // Arrêt volontaire (sans erreur) ou autre station : la prochaine connexion n'est pas une reconnexion
+            playedId = null
+        }
+        reconnecting = isBuffering && playedId != null
+        waitingNetwork = p.playbackState == Player.STATE_IDLE && p.playWhenReady &&
+            p.playerError?.errorCode in NETWORK_ERRORS
         val item = p.currentMediaItem
         currentId = item?.mediaId
         currentName = item?.mediaMetadata?.title?.toString()
@@ -239,7 +258,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun statusText(): String = when {
-        isBuffering -> "Connexion…"
+        isBuffering -> if (reconnecting) "Reconnexion…" else "Connexion…"
+        waitingNetwork -> "En attente du réseau…"
         isPlaying -> currentTrack ?: listOfNotNull("En direct", currentInfo?.takeIf { it.isNotBlank() }).joinToString(" · ")
         else -> "Arrêté"
     }.let { if (casting) "Cast · $it" else it }
