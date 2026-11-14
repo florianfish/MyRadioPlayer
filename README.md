@@ -154,6 +154,21 @@ Le trafic HTTP non chiffré est autorisé, car beaucoup de flux radio ne sont pa
 - Les logos sont gardés en mémoire seulement le temps de la session. Les formats SVG et ICO ne s'affichent pas.
 - Une station relancée depuis la notification, si elle n'apparaît dans aucune liste, ne peut pas être ajoutée aux favoris depuis le lecteur.
 
+## Variantes et F-Droid
+
+Le même code produit deux variantes :
+
+- **full** (releases GitHub, Obtainium) : tout, y compris Google Cast, les pochettes d'album (iTunes) et les icônes de secours (Google).
+- **fdroid** : 100 % libre, sans Google Cast (qui dépend des services Google Play) ni services en ligne non libres. C'est celle que F-Droid compile.
+
+Les APK des deux variantes sont signés différemment : on ne passe pas de l'une à l'autre sans désinstaller.
+
+**Demande d'inclusion dans F-Droid :** fiche de l'appli dans `fastlane/metadata/android/` (description, icône, captures), modèle de métadonnées dans `docs/fdroid-metadata.yml`. Après une release `v*` contenant les variantes, ouvrir une demande de fusion sur [fdroiddata](https://gitlab.com/fdroid/fdroiddata) avec ce fichier (voir le [guide d'inclusion](https://f-droid.org/docs/Submitting_to_F-Droid_Quick_Start_Guide/)).
+
+## Licence
+
+[GPL-3.0](LICENSE).
+
 ## Crédits
 
 Données des stations : [Radio Browser](https://www.radio-browser.info/), annuaire communautaire et libre. L'application signale chaque écoute à l'API, comme celle-ci le demande, pour améliorer le classement des stations.

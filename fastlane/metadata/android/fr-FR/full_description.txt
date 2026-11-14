@@ -1,0 +1,15 @@
+<p>Un lecteur de radios internet minimaliste : on cherche une station, on l'écoute, on la garde en favori. Sans publicité dans l'appli, sans compte, sans pistage.</p>
+<p>Les stations viennent de <a href="https://www.radio-browser.info/">Radio Browser</a>, un annuaire communautaire et libre de plus de 50 000 radios.</p>
+<p><b>Fonctionnalités</b></p>
+<ul>
+<li>Recherche instantanée dans le nom, les genres et la région, puces de genres, choix du pays et de la région, tri et filtre de qualité</li>
+<li>Favoris, réorganisables par glisser-déposer</li>
+<li>Lecture en arrière-plan avec notification, contrôles sur l'écran de verrouillage, le casque et la voiture</li>
+<li>Titre du morceau en cours quand la radio l'annonce</li>
+<li>Écran de lecture en grand avec curseur de volume</li>
+<li>Minuteur de sommeil avec baisse progressive du son</li>
+<li>Reconnexion automatique après une coupure réseau</li>
+<li>Reprise de la dernière station écoutée</li>
+<li>Thème clair/sombre et couleurs Material You</li>
+</ul>
+<p>Cette version F-Droid n'inclut pas Google Cast ni les services en ligne non libres (pochettes d'album, icônes de secours) présents dans la version publiée sur GitHub.</p>

@@ -13,7 +13,6 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.cast.CastPlayer
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Metadata
@@ -67,10 +66,8 @@ class PlaybackService : MediaSessionService() {
             .setDeviceVolumeControlEnabled(true)
             .build()
 
-        // Google Cast : bascule seul entre le téléphone et l'appareil casté.
-        // Sans services Google (ou en cas d'échec), lecture locale seulement.
-        val player: Player = runCatching { CastPlayer.Builder(this).setLocalPlayer(exoPlayer).build() }
-            .getOrElse { exoPlayer }
+        // Google Cast selon la variante (cf. src/full et src/fdroid)
+        val player: Player = withCast(this, exoPlayer)
         player.addListener(NowPlayingListener(player))
         resumeOnNetwork = ResumeOnNetwork(this, player)
 

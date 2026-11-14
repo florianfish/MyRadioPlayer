@@ -1,0 +1,15 @@
+<p>A minimalist internet radio player: search for a station, listen, keep it as a favorite. No in-app ads, no account, no tracking. The interface is in French.</p>
+<p>Stations come from <a href="https://www.radio-browser.info/">Radio Browser</a>, a free, community-run directory of over 50,000 radio stations.</p>
+<p><b>Features</b></p>
+<ul>
+<li>Instant search across names, genres and regions, genre chips, country and region filters, sorting and quality filter</li>
+<li>Favorites, reorderable by drag and drop</li>
+<li>Background playback with notification, lock screen, headset and car controls</li>
+<li>Current track title when the station broadcasts it</li>
+<li>Full-screen player with volume slider</li>
+<li>Sleep timer with gradual fade-out</li>
+<li>Automatic reconnection after network drops</li>
+<li>Resumes the last station played</li>
+<li>Light/dark theme and Material You colors</li>
+</ul>
+<p>This F-Droid build does not include Google Cast or the non-free online services (album art, fallback icons) found in the GitHub release.</p>

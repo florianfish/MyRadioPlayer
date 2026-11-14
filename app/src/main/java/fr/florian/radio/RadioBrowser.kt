@@ -55,7 +55,7 @@ data class Station(
                 favicon,
                 origin?.let { "$it/apple-touch-icon.png" },
                 origin?.let { "$it/favicon.ico" },
-                domain?.let { "https://www.google.com/s2/favicons?domain=$it&sz=128" },
+                domain?.takeIf { BuildConfig.NON_FREE_NET }?.let { "https://www.google.com/s2/favicons?domain=$it&sz=128" },
             ).distinct()
         }
 
@@ -335,6 +335,8 @@ object RadioBrowser {
 object CoverArt {
     /** Adresse d'une pochette 600 px pour « Artiste - Titre », ou null. */
     fun find(track: String): String? {
+        // Variante F-Droid : pas de service en ligne non libre
+        if (!BuildConfig.NON_FREE_NET) return null
         // Seulement les annonces au format « artiste - titre » : évite les pochettes au hasard sur un slogan
         if (" - " !in track && " – " !in track) return null
         val q = URLEncoder.encode(track.replace(" – ", " ").replace(" - ", " "), "UTF-8")
