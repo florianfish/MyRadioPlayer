@@ -65,6 +65,7 @@ import androidx.media3.common.DeviceInfo
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
@@ -99,6 +100,8 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
     private var favorites by mutableStateOf<List<Station>>(emptyList())
     private var lastStation by mutableStateOf<Station?>(null)
+    /** Heure d'arrêt du minuteur de sommeil (publiée par le service), 0 si aucun. */
+    private var sleepAt by mutableLongStateOf(0L)
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncState(player)
@@ -140,12 +143,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
-        val future = MediaController.Builder(this, token).buildAsync()
+        val future = MediaController.Builder(this, token)
+            .setListener(object : MediaController.Listener {
+                override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+                    sleepAt = extras.getLong(EXTRA_SLEEP_AT)
+                }
+            })
+            .buildAsync()
         controllerFuture = future
         future.addListener({
             val c = runCatching { future.get() }.getOrNull() ?: return@addListener
             controller = c
             c.addListener(playerListener)
+            sleepAt = c.sessionExtras.getLong(EXTRA_SLEEP_AT)
             // Rien en cours : on prépare la barre de lecture avec la dernière station (sans la lancer)
             if (c.mediaItemCount == 0) lastStation?.let { c.setMediaItem(it.toMediaItem()) }
             syncState(c)
@@ -225,6 +235,14 @@ class MainActivity : ComponentActivity() {
         // SecurityException possible en mode Ne pas déranger
         runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
         volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+    }
+
+    /** Minuteur de sommeil géré par le service (fonctionne écran éteint) ; 0 l'annule. */
+    private fun setSleepTimer(minutes: Int) {
+        controller?.sendCustomCommand(
+            SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY),
+            Bundle().apply { putInt(EXTRA_SLEEP_MINUTES, minutes) },
+        )
     }
 
     /** Radio en direct : on coupe le flux (stop) plutôt que pause, pour repartir en live. */
@@ -496,6 +514,8 @@ class MainActivity : ComponentActivity() {
                 onToggle = ::togglePlayback,
                 onVolume = ::changeVolume,
                 onDismiss = { nowPlayingOpen = false },
+                sleepAt = sleepAt,
+                onSleepTimer = ::setSleepTimer,
             )
         }
     }
@@ -800,6 +820,8 @@ private fun NowPlayingSheet(
     onToggle: () -> Unit,
     onVolume: (Int) -> Unit,
     onDismiss: () -> Unit,
+    sleepAt: Long,
+    onSleepTimer: (Int) -> Unit,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -897,8 +919,65 @@ private fun NowPlayingSheet(
                     Icon(VolumeUpIcon, contentDescription = "Volume", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            SleepTimerButton(sleepAt, onSleepTimer)
         }
     }
+}
+
+/**
+ * Minuteur de sommeil : bouton qui ouvre les durées proposées, et temps restant quand il est actif.
+ * [sleepAt] : heure d'arrêt (ms depuis l'époque), 0 si aucun minuteur.
+ */
+@Composable
+private fun SleepTimerButton(sleepAt: Long, onSleepTimer: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    // Temps restant rafraîchi toutes les 15 s
+    val remaining by produceState(0L, sleepAt) {
+        while (true) {
+            value = (sleepAt - System.currentTimeMillis()).coerceAtLeast(0)
+            if (sleepAt == 0L) break
+            delay(15_000)
+        }
+    }
+    Box {
+        FilterChip(
+            selected = sleepAt > 0,
+            onClick = { open = true },
+            leadingIcon = { Icon(BedtimeIcon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            label = {
+                Text(
+                    if (sleepAt > 0) {
+                        val minutes = (remaining + 59_999) / 60_000
+                        "Arrêt dans $minutes min"
+                    } else {
+                        "Minuteur"
+                    }
+                )
+            },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            SLEEP_DURATIONS.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(if (minutes < 60) "$minutes min" else "${minutes / 60} h" + if (minutes % 60 > 0) " ${minutes % 60}" else "") },
+                    onClick = { open = false; onSleepTimer(minutes) },
+                )
+            }
+            if (sleepAt > 0) {
+                DropdownMenuItem(text = { Text("Désactiver") }, onClick = { open = false; onSleepTimer(0) })
+            }
+        }
+    }
+}
+
+private val SLEEP_DURATIONS = listOf(15, 30, 45, 60, 90)
+
+private val BedtimeIcon by lazy {
+    vectorIcon(
+        "Bedtime",
+        "M12.34,2.02C6.59,1.82 2,6.42 2,12c0,5.52 4.48,10 10,10c3.71,0 6.93,-2.02 8.66,-5.02" +
+            "C13.15,16.73 8.57,8.55 12.34,2.02z",
+    )
 }
 
 /** Pochette du morceau [track] (iTunes), null tant qu'elle n'est pas trouvée. */
