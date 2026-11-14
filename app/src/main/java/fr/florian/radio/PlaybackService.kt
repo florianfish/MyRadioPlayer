@@ -1,11 +1,14 @@
 package fr.florian.radio
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -68,6 +71,20 @@ class PlaybackService : MediaSessionService() {
                             item.requestMetadata.mediaUri?.let { item.buildUpon().setUri(it).build() } ?: item
                         }.toMutableList()
                     )
+
+                // Lecture demandée sans station chargée (casque, voiture, carte média du système) :
+                // on relance la dernière station écoutée
+                override fun onPlaybackResumption(
+                    mediaSession: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    isForPlayback: Boolean,
+                ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                    val station = LastStation.load(this@PlaybackService)
+                        ?: return Futures.immediateFailedFuture(IllegalStateException("Aucune station mémorisée"))
+                    return Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(listOf(station.toMediaItem()), 0, C.TIME_UNSET)
+                    )
+                }
             })
             .build()
     }
@@ -86,6 +103,44 @@ class PlaybackService : MediaSessionService() {
         }
         session = null
         super.onDestroy()
+    }
+}
+
+/**
+ * MediaItem d'une station. L'URI est mise à la fois dans `setUri` et dans
+ * `RequestMetadata.mediaUri` : seule la seconde survit au passage controller -> session.
+ */
+fun Station.toMediaItem(): MediaItem {
+    val uri = Uri.parse(url)
+    return MediaItem.Builder()
+        .setMediaId(uuid)
+        .setUri(uri)
+        .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(name)
+                .setArtist(subtitle)
+                .setSubtitle(subtitle)
+                .setArtworkUri(favicon?.let(Uri::parse))
+                .setIsPlayable(true)
+                .setIsBrowsable(false)
+                .build()
+        )
+        .build()
+}
+
+/** Dernière station lancée, pour la reprise (appli, casque, voiture). Mêmes préférences que les favoris. */
+object LastStation {
+    private const val KEY = "last_station"
+
+    private fun prefs(context: Context) = context.getSharedPreferences("radio", Context.MODE_PRIVATE)
+
+    fun load(context: Context): Station? = runCatching {
+        prefs(context).getString(KEY, null)?.let { RadioBrowser.parse("[$it]").firstOrNull() }
+    }.getOrNull()
+
+    fun save(context: Context, station: Station) {
+        prefs(context).edit().putString(KEY, station.toJson().toString()).apply()
     }
 }
 

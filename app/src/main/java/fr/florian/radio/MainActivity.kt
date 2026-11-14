@@ -3,7 +3,6 @@ package fr.florian.radio
 import android.Manifest
 import android.content.ComponentName
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.LruCache
@@ -52,8 +51,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -83,6 +80,7 @@ class MainActivity : ComponentActivity() {
 
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
     private var favorites by mutableStateOf<List<Station>>(emptyList())
+    private var lastStation by mutableStateOf<Station?>(null)
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncState(player)
@@ -100,6 +98,7 @@ class MainActivity : ComponentActivity() {
 
         favorites = runCatching { RadioBrowser.parse(prefs.getString(FAVORITES_KEY, null) ?: "[]") }
             .getOrDefault(emptyList())
+        lastStation = LastStation.load(this)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -129,6 +128,8 @@ class MainActivity : ComponentActivity() {
             val c = runCatching { future.get() }.getOrNull() ?: return@addListener
             controller = c
             c.addListener(playerListener)
+            // Rien en cours : on prépare la barre de lecture avec la dernière station (sans la lancer)
+            if (c.mediaItemCount == 0) lastStation?.let { c.setMediaItem(it.toMediaItem()) }
             syncState(c)
         }, ContextCompat.getMainExecutor(this))
     }
@@ -161,25 +162,11 @@ class MainActivity : ComponentActivity() {
 
     private fun play(s: Station) {
         val c = controller ?: return
-        val uri = Uri.parse(s.url)
-        val item = MediaItem.Builder()
-            .setMediaId(s.uuid)
-            .setUri(uri)
-            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(s.name)
-                    .setArtist(s.subtitle)
-                    .setSubtitle(s.subtitle)
-                    .setArtworkUri(s.favicon?.let(Uri::parse))
-                    .setIsPlayable(true)
-                    .setIsBrowsable(false)
-                    .build()
-            )
-            .build()
-        c.setMediaItem(item)
+        c.setMediaItem(s.toMediaItem())
         c.prepare()
         c.play()
+        lastStation = s
+        LastStation.save(this, s)
         lifecycleScope.launch(Dispatchers.IO) { RadioBrowser.countClick(s.uuid) }
     }
 
@@ -257,7 +244,9 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(Unit) { load(query) }
 
-        val current = favorites.find { it.uuid == currentId } ?: stations.find { it.uuid == currentId }
+        val current = favorites.find { it.uuid == currentId }
+            ?: stations.find { it.uuid == currentId }
+            ?: lastStation?.takeIf { it.uuid == currentId }
 
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
@@ -265,7 +254,7 @@ class MainActivity : ComponentActivity() {
                 currentName?.let { name ->
                     PlayerBar(
                         name = name,
-                        art = currentArt,
+                        logos = current?.logoUrls ?: listOfNotNull(currentArt),
                         status = statusText(),
                         playing = isPlaying,
                         buffering = isBuffering,
@@ -385,7 +374,7 @@ private fun StationRow(s: Station, current: Boolean, favorite: Boolean, onClick:
         } else {
             ListItemDefaults.colors()
         },
-        leadingContent = { StationLogo(s.name, s.favicon) },
+        leadingContent = { StationLogo(s.name, s.logoUrls) },
         headlineContent = {
             Text(
                 s.name,
@@ -437,16 +426,41 @@ private fun EmptyFavorites(onDiscover: () -> Unit) {
     }
 }
 
-// shortcut: cache mémoire seulement, les échecs ne sont pas mémorisés (re-tentés au scroll) ; passer à Coil si besoin d'un cache disque.
+// shortcut: cache mémoire seulement (pas de cache disque) ; passer à Coil si besoin.
+// Clé : la liste des adresses candidates d'une station. Les échecs sont mémorisés pour la session,
+// pour ne pas retenter trois téléchargements à chaque défilement.
 private val logoCache = LruCache<String, ImageBitmap>(200)
+private val failedLogos = HashSet<String>()
 
+/** En dessous, l'image est floue une fois agrandie : on cherche mieux parmi les adresses suivantes. */
+private const val SHARP_LOGO_PX = 64
+
+/**
+ * Logo de la station : première image nette parmi [urls] (dans l'ordre), sinon la plus grande
+ * trouvée, sinon l'initiale du nom.
+ */
 @Composable
-private fun StationLogo(name: String, url: String?, size: Dp = 48.dp) {
-    val logo by produceState(url?.let { logoCache.get(it) }, url) {
-        if (value == null && url != null) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull()
-            }?.also { logoCache.put(url, it) }
+private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
+    val key = urls.joinToString("|")
+    val logo by produceState(logoCache.get(key), key) {
+        // produceState garde l'ancienne valeur quand la clé change (barre de lecture : changement de station)
+        value = logoCache.get(key)
+        if (value == null && urls.isNotEmpty() && key !in failedLogos) {
+            val image = withContext(Dispatchers.IO) {
+                var best: ImageBitmap? = null
+                for (url in urls) {
+                    val img = runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull() ?: continue
+                    if (maxOf(img.width, img.height) >= SHARP_LOGO_PX) return@withContext img
+                    if (best == null || img.width > best.width) best = img
+                }
+                best
+            }
+            if (image != null) {
+                logoCache.put(key, image)
+                value = image
+            } else {
+                failedLogos.add(key)
+            }
         }
     }
     val image = logo
@@ -473,7 +487,7 @@ private fun StationLogo(name: String, url: String?, size: Dp = 48.dp) {
 @Composable
 private fun PlayerBar(
     name: String,
-    art: String?,
+    logos: List<String>,
     status: String,
     playing: Boolean,
     buffering: Boolean,
@@ -490,7 +504,7 @@ private fun PlayerBar(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StationLogo(name, art, 52.dp)
+            StationLogo(name, logos, 52.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(

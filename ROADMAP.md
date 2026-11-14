@@ -16,7 +16,7 @@ En 4G, en voiture ou au passage Wi-Fi ↔ mobile, le flux tombe : l'appli affich
 - Afficher « Reconnexion… » dans la barre de lecture pendant les tentatives.
 - Effort : faible à moyen.
 
-### 3. Mémoriser la dernière station
+### 3. Mémoriser la dernière station — ✅ fait
 - Enregistrer la dernière station jouée (mêmes préférences que les favoris).
 - Au lancement, afficher la barre de lecture avec cette station, prête à démarrer.
 - Implémenter `onPlaybackResumption` dans le callback de la session pour que le bouton lecture du casque Bluetooth ou de la voiture relance la radio, même appli fermée.
