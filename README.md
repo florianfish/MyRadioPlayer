@@ -11,6 +11,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 - **Dernière station** : à l'ouverture, la barre de lecture propose la dernière radio écoutée. Le bouton lecture du casque Bluetooth, de la voiture ou de la carte média d'Android la relance même appli fermée.
 - **Titre en cours** : quand la radio l'annonce dans son flux, le morceau diffusé s'affiche dans la barre de lecture, la notification et sur l'écran de verrouillage.
 - **Logos des stations**, thème clair/sombre et couleurs Material You (Android 12+).
+- **Numéro de version** affiché en petit à côté du titre : `v1.1` pour une release, `v1.0-debug.N` pour un APK de test (N = numéro du run GitHub Actions).
 - Flux MP3, AAC et HLS (`.m3u8`), en HTTP comme en HTTPS.
 
 ## Installation
@@ -51,7 +52,8 @@ git push origin v1.1
 
 Le nom de version vient du tag (`1.1`) et le `versionCode` du numéro d'exécution du workflow, qui augmente toujours.
 
-- Le tag **doit commencer par `v`** : un tag `1.1` ou une release créée à la main depuis l'interface GitHub ne déclenche aucun build.
+- Le tag **doit commencer par `v`** : un tag `1.1` ne déclenche aucun build.
+- Depuis l'interface GitHub (sans ordinateur) : **Releases** → **Draft a new release** → **Choose a tag**, taper `v1.1` puis **Create new tag: v1.1 on publish** sur `main` → **Publish release**. La création du tag lance le workflow, qui ajoute l'APK à cette release.
 - Suivre l'exécution dans l'onglet **Actions** (workflow « Release APK ») ; une fois terminé, l'APK `SimpleRadio-v1.1.apk` est attaché à la release.
 - Si le build échoue (secret manquant ou erroné…), corriger puis relancer avec **Re-run jobs** sur l'exécution, ou repousser le tag :
 

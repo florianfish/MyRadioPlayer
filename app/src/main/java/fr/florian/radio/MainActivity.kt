@@ -266,12 +266,22 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Text(
-                    "Radio",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
-                )
+                Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
+                    Text(
+                        "Radio",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Version installée, discrète : utile pour vérifier une mise à jour (Obtainium) ou un APK de test
+                    Text(
+                        "v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                }
                 PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                     Tab(
                         selected = tab == TAB_FAVORITES,
