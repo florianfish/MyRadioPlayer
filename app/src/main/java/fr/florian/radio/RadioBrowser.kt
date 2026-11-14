@@ -22,7 +22,7 @@ data class Station(
     val subtitle: String
         get() = listOfNotNull(
             country.takeIf { it.isNotBlank() },
-            tags.takeIf { it.isNotBlank() },
+            Tags.display(tags).takeIf { it.isNotBlank() },
             if (bitrate > 0) "$bitrate kbps" else codec.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
 
@@ -36,6 +36,44 @@ data class Station(
         .put("tags", tags)
         .put("codec", codec)
         .put("bitrate", bitrate)
+}
+
+/**
+ * Mise en forme des tags bruts de l'annuaire (« aac, information, public radio ») :
+ * sans tags techniques ni génériques, genres anglais courants traduits, majuscule, sans doublon.
+ * Appliqué à l'affichage pour que les favoris déjà enregistrés en profitent.
+ */
+object Tags {
+    private const val MAX = 2
+
+    /** Formats, débits et mots qui n'apprennent rien sur la station. */
+    private val ignored = setOf(
+        "aac", "aac+", "he-aac", "heaac", "mp3", "ogg", "opus", "flac", "hls", "m3u8", "icecast", "shoutcast",
+        "radio", "webradio", "web radio", "internet radio", "online radio", "fm", "am", "dab", "dab+",
+        "stream", "streaming", "live", "station", "fr", "france", "french", "français", "francais",
+    )
+
+    /** Débits (« 128k », « 64 kbps »…). */
+    private val bitrate = Regex("[0-9]+ *k(bps|b/s|bit)?")
+
+    /** Genres anglais fréquents et fautes courantes de l'annuaire. */
+    private val translations = mapOf(
+        "news" to "info", "information" to "info", "informations" to "info", "actualités" to "info",
+        "talk" to "débat", "debate" to "débat", "sports" to "sport", "music" to "musique",
+        "classical" to "classique", "public radio" to "service public", "generalist" to "généraliste",
+        "general" to "généraliste", "génaraliste" to "généraliste", "generaliste" to "généraliste",
+        "variety" to "variétés", "variete" to "variétés", "oldies" to "rétro",
+        "local" to "locale", "regional" to "régionale", "christian" to "chrétienne",
+        "catholic" to "catholique", "kids" to "enfants",
+    )
+
+    fun display(raw: String): String = raw.split(',')
+        .map { it.trim().lowercase() }
+        .filter { it.isNotEmpty() && it !in ignored && !bitrate.matches(it) }
+        .map { translations[it] ?: it }
+        .distinct()
+        .take(MAX)
+        .joinToString(", ") { tag -> tag.replaceFirstChar { it.titlecase() } }
 }
 
 /** Client minimal pour https://api.radio-browser.info */
@@ -112,7 +150,7 @@ object RadioBrowser {
                 url = url,
                 favicon = o.optString("favicon").takeIf { it.startsWith("http") },
                 country = o.optString("countrycode"),
-                tags = o.optString("tags").split(',').map { it.trim() }.filter { it.isNotBlank() }.take(3).joinToString(", "),
+                tags = o.optString("tags").split(',').map { it.trim() }.filter { it.isNotBlank() }.take(8).joinToString(", "),
                 codec = o.optString("codec"),
                 bitrate = o.optInt("bitrate"),
             )
