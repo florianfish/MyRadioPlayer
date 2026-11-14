@@ -132,14 +132,15 @@ class PlaybackService : MediaSessionService() {
                 override fun onConnect(
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo,
-                ): MediaSession.ConnectionResult =
-                    MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                        .setAvailableSessionCommands(
-                            MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                                .add(SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY))
-                                .build()
-                        )
-                        .build()
+                ): MediaSession.ConnectionResult {
+                    val default = super.onConnect(session, controller)
+                    return MediaSession.ConnectionResult.accept(
+                        default.availableSessionCommands.buildUpon()
+                            .add(SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY))
+                            .build(),
+                        default.availablePlayerCommands,
+                    )
+                }
 
                 override fun onCustomCommand(
                     session: MediaSession,
