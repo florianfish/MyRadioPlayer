@@ -3,15 +3,47 @@ name: Release APK
 on:
   push:
     tags: ["v*"]
+  # Bouton « Run workflow » de l'onglet Actions : calcule la version suivante à partir du dernier tag
+  workflow_dispatch:
+    inputs:
+      type:
+        description: "Type de version (1.4.0 → mineure 1.5.0, correctif 1.4.1, majeure 2.0.0)"
+        type: choice
+        options: [mineure, correctif, majeure]
+        default: mineure
 
 permissions:
   contents: write
+
+concurrency: release
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Version
+        id: version
+        env:
+          TYPE: ${{ inputs.type }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::Lancer le workflow depuis la branche main"; exit 1; }
+            LAST=$(git ls-remote --tags --refs origin 'v*' | sed 's#.*refs/tags/v##' | grep -E '^[0-9]+(\.[0-9]+){0,2}$' | sort -V | tail -1)
+            IFS=. read -r MAJ MIN PAT <<< "${LAST:-0.0.0}"
+            MAJ=${MAJ:-0} MIN=${MIN:-0} PAT=${PAT:-0}
+            case "$TYPE" in
+              majeure)   TAG="v$((MAJ + 1)).0.0" ;;
+              correctif) TAG="v$MAJ.$MIN.$((PAT + 1))" ;;
+              *)         TAG="v$MAJ.$((MIN + 1)).0" ;;
+            esac
+            echo "Dernière version : v${LAST:-aucune} → nouvelle : $TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -27,19 +59,23 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           test -n "$KEYSTORE_BASE64" || { echo "::error::Secret KEYSTORE_BASE64 manquant"; exit 1; }
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
-          VERSION_NAME="${GITHUB_REF_NAME#v}" gradle assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk "SimpleRadio-$GITHUB_REF_NAME.apk"
+          VERSION_NAME="${TAG#v}" gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "SimpleRadio-$TAG.apk"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          APK="SimpleRadio-$GITHUB_REF_NAME.apk"
+          APK="SimpleRadio-$TAG.apk"
           # Release déjà créée à la main dans l'interface GitHub : on y ajoute (ou remplace) l'APK
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$APK" --clobber
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$APK" --title "$GITHUB_REF_NAME" --generate-notes
+            # Lancement par le bouton : la release crée aussi le tag, sur le commit compilé.
+            # (Un tag créé avec le jeton du workflow ne relance pas ce workflow : pas de double build.)
+            gh release create "$TAG" "$APK" --title "$TAG" --generate-notes --target "$GITHUB_SHA"
           fi
