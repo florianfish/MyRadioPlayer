@@ -44,7 +44,10 @@ Obtainium vérifie ensuite les releases en arrière-plan et notifie quand une no
 
 ### GitHub Actions
 
-- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` et sur chaque pull request (artefact `simple-radio-apk`, ou lancement manuel avec **Run workflow**). Sur une pull request, un commentaire donne le lien de téléchargement de l'APK, mis à jour à chaque nouveau commit. Ces APK sont signés avec une clé différente à chaque build : ils servent à tester, pas à mettre à jour l'application installée.
+Les deux workflows appellent les workflows partagés de [Forge-Apk](https://github.com/florianfish/Forge-Apk), communs à mes applis Android.
+
+- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` et sur chaque pull request (artefact `SimpleRadio-apk`, ou lancement manuel avec **Run workflow**). Sur une pull request, un commentaire donne le lien de téléchargement de l'APK, mis à jour à chaque nouveau commit.
+- À chaque push sur `main`, la pré-release **debug** est remplacée : le dernier APK de debug est toujours au même lien, [SimpleRadio-debug.apk](https://github.com/florianfish/MyRadioPlayer/releases/download/debug/SimpleRadio-debug.apk). Les APK de debug sont signés avec une clé de debug fixe : chacun s'installe par-dessus le précédent, mais pas par-dessus une release (clé différente).
 - `.github/workflows/release.yml` publie une **Release** avec l'APK signé à chaque tag `v*`.
 
 ### Publier une version
