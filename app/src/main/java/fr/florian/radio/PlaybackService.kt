@@ -4,11 +4,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.cast.CastPlayer
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -38,7 +41,7 @@ class PlaybackService : MediaSessionService() {
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(15_000)
 
-        val player = ExoPlayer.Builder(this)
+        val exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -52,6 +55,11 @@ class PlaybackService : MediaSessionService() {
             // Volume du téléphone pilotable depuis l'appli (curseur de l'écran de lecture)
             .setDeviceVolumeControlEnabled(true)
             .build()
+
+        // Google Cast : bascule seul entre le téléphone et l'appareil casté.
+        // Sans services Google (ou en cas d'échec), lecture locale seulement.
+        val player: Player = runCatching { CastPlayer.Builder(this).setLocalPlayer(exoPlayer).build() }
+            .getOrElse { exoPlayer }
         player.addListener(NowPlayingListener(player))
 
         val openApp = PendingIntent.getActivity(
@@ -62,7 +70,7 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setSessionActivity(openApp)
             .setCallback(object : MediaSession.Callback {
-                // Restaure l'URI du flux si elle n'a pas traversé controller -> session
+                // Restaure l'URI (et le type MIME, utile au Cast) s'ils n'ont pas traversé controller -> session
                 override fun onAddMediaItems(
                     mediaSession: MediaSession,
                     controller: MediaSession.ControllerInfo,
@@ -70,7 +78,11 @@ class PlaybackService : MediaSessionService() {
                 ): ListenableFuture<MutableList<MediaItem>> =
                     Futures.immediateFuture(
                         mediaItems.map { item ->
-                            item.requestMetadata.mediaUri?.let { item.buildUpon().setUri(it).build() } ?: item
+                            val uri = item.requestMetadata.mediaUri ?: return@map item
+                            item.buildUpon()
+                                .setUri(uri)
+                                .setMimeType(item.requestMetadata.extras?.getString(MIME_EXTRA))
+                                .build()
                         }.toMutableList()
                     )
 
@@ -119,12 +131,20 @@ class PlaybackService : MediaSessionService() {
  */
 fun Station.toMediaItem(): MediaItem {
     val uri = Uri.parse(url)
+    val mime = mimeType()
     return MediaItem.Builder()
         .setMediaId(uuid)
         .setUri(uri)
-        .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
+        .setMimeType(mime)
+        .setRequestMetadata(
+            MediaItem.RequestMetadata.Builder()
+                .setMediaUri(uri)
+                .setExtras(Bundle().apply { putString(MIME_EXTRA, mime) })
+                .build()
+        )
         .setMediaMetadata(
             MediaMetadata.Builder()
+                .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
                 .setTitle(name)
                 .setArtist(subtitle)
                 .setSubtitle(subtitle)
@@ -134,6 +154,20 @@ fun Station.toMediaItem(): MediaItem {
                 .build()
         )
         .build()
+}
+
+private const val MIME_EXTRA = "mime"
+
+/**
+ * Type MIME du flux : le récepteur Cast en a besoin pour le lire. Localement, seul le HLS
+ * change quelque chose (choix de la source) ; le reste est détecté par ExoPlayer.
+ */
+private fun Station.mimeType(): String? = when {
+    hls || url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+    codec.startsWith("AAC", ignoreCase = true) -> MimeTypes.AUDIO_AAC
+    codec.equals("MP3", ignoreCase = true) -> MimeTypes.AUDIO_MPEG
+    codec.equals("OGG", ignoreCase = true) -> MimeTypes.AUDIO_OGG
+    else -> null
 }
 
 /** Dernière station lancée, pour la reprise (appli, casque, voiture). Mêmes préférences que les favoris. */

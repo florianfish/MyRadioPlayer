@@ -22,6 +22,8 @@ data class Station(
     val tags: String,
     val codec: String,
     val bitrate: Int,
+    /** Flux HLS (.m3u8) selon l'annuaire : sert au type MIME envoyé au Cast. */
+    val hls: Boolean = false,
 ) {
     val subtitle: String
         get() = listOfNotNull(
@@ -60,6 +62,7 @@ data class Station(
         .put("tags", tags)
         .put("codec", codec)
         .put("bitrate", bitrate)
+        .put("hls", if (hls) 1 else 0)
 }
 
 /**
@@ -222,6 +225,7 @@ object RadioBrowser {
                 tags = o.optString("tags").split(',').map { it.trim() }.filter { it.isNotBlank() }.take(8).joinToString(", "),
                 codec = o.optString("codec"),
                 bitrate = o.optInt("bitrate"),
+                hls = o.optInt("hls") == 1,
             )
         }.distinctBy { it.uuid }
     }

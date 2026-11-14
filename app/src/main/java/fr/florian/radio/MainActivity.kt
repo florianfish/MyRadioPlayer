@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.cast.MediaRouteButton
+import androidx.media3.common.DeviceInfo
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -86,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private var currentArt by mutableStateOf<String?>(null)
     private var volume by mutableIntStateOf(0)
     private var maxVolume by mutableIntStateOf(0)
+    private var casting by mutableStateOf(false)
 
     private val audio by lazy { getSystemService(AudioManager::class.java) }
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
@@ -163,9 +166,16 @@ class MainActivity : ComponentActivity() {
         // `artist` vaut la description de la station, ou le morceau annoncé par le flux (cf. PlaybackService)
         currentTrack = md?.artist?.toString()?.takeIf { it.isNotBlank() && it != currentInfo }
         currentArt = item?.mediaMetadata?.artworkUri?.toString()
-        // Volume média lu directement : les événements du lecteur (boutons physiques compris) déclenchent ce rafraîchissement
-        volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-        maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        casting = p.deviceInfo.playbackType == DeviceInfo.PLAYBACK_TYPE_REMOTE
+        if (casting) {
+            // Cast : volume de l'appareil casté, porté par le lecteur
+            volume = p.deviceVolume
+            maxVolume = p.deviceInfo.maxVolume
+        } else {
+            // Volume média lu directement : les événements du lecteur (boutons physiques compris) déclenchent ce rafraîchissement
+            volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        }
     }
 
     private fun saveFavorites(list: List<Station>) {
@@ -185,6 +195,11 @@ class MainActivity : ComponentActivity() {
 
     /** Réglé via AudioManager : l'ordre de volume passé par la session Media3 n'était pas appliqué. */
     private fun changeVolume(v: Int) {
+        if (casting) {
+            controller?.setDeviceVolume(v, 0)
+            volume = v
+            return
+        }
         // SecurityException possible en mode Ne pas déranger
         runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
         volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -205,7 +220,7 @@ class MainActivity : ComponentActivity() {
         isBuffering -> "Connexion…"
         isPlaying -> currentTrack ?: listOfNotNull("En direct", currentInfo?.takeIf { it.isNotBlank() }).joinToString(" · ")
         else -> "Arrêté"
-    }
+    }.let { if (casting) "Cast · $it" else it }
 
     @Composable
     private fun RadioScreen() {
@@ -303,6 +318,9 @@ class MainActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.alignByBaseline(),
                     )
+                    Spacer(Modifier.weight(1f))
+                    // Bouton Google Cast : visible quand un appareil compatible est sur le réseau
+                    MediaRouteButton(modifier = Modifier.align(Alignment.CenterVertically))
                 }
                 PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                     Tab(
@@ -716,9 +734,9 @@ private fun NowPlayingSheet(
                         )
                     }
                 }
-                Spacer(Modifier.size(48.dp))
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { MediaRouteButton() }
             }
-            // Volume média du téléphone (le même que les boutons physiques)
+            // Volume (téléphone, ou appareil casté) du téléphone (le même que les boutons physiques)
             if (maxVolume > 0) {
                 Spacer(Modifier.height(28.dp))
                 var dragged by remember { mutableStateOf<Float?>(null) }
