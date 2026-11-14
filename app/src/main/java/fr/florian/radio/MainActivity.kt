@@ -21,11 +21,14 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -64,7 +67,9 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -178,6 +183,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun loadSearch(): Criteria {
+        val code = prefs.getString("search_country", "FR")
+        return Criteria(
+            country = COUNTRIES.find { it.code == code }, // "" : tous les pays
+            sort = Sort.entries.find { it.name == prefs.getString("search_sort", null) } ?: Sort.POPULAR,
+            hd = prefs.getBoolean("search_hd", false),
+        )
+    }
+
+    private fun saveSearch(s: Criteria) {
+        prefs.edit()
+            .putString("search_country", s.country?.code ?: "")
+            .putString("search_sort", s.sort.name)
+            .putBoolean("search_hd", s.hd)
+            .apply()
+    }
+
     private fun saveFavorites(list: List<Station>) {
         favorites = list
         prefs.edit().putString(FAVORITES_KEY, JSONArray(list.map { it.toJson() }).toString()).apply()
@@ -226,32 +248,16 @@ class MainActivity : ComponentActivity() {
     private fun RadioScreen() {
         var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
         var tab by rememberSaveable { mutableStateOf(if (favorites.isEmpty()) TAB_DISCOVER else TAB_FAVORITES) }
-        var query by rememberSaveable { mutableStateOf("") }
+        var search by remember { mutableStateOf(loadSearch()) }
+        var regions by remember { mutableStateOf<List<String>>(emptyList()) }
+        var reload by remember { mutableIntStateOf(0) }
         var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
         var loading by remember { mutableStateOf(true) }
         var error by remember { mutableStateOf<String?>(null) }
-        var header by remember { mutableStateOf("Populaires en France") }
         val scope = rememberCoroutineScope()
         val keyboard = LocalSoftwareKeyboardController.current
         val snackbar = remember { SnackbarHostState() }
         val favoriteIds = favorites.mapTo(HashSet()) { it.uuid }
-
-        fun load(q: String) {
-            scope.launch {
-                loading = true
-                error = null
-                try {
-                    stations = withContext(Dispatchers.IO) {
-                        if (q.isBlank()) RadioBrowser.popular("FR") else RadioBrowser.search(q.trim())
-                    }
-                    header = if (q.isBlank()) "Populaires en France" else "Résultats pour « ${q.trim()} »"
-                } catch (e: Exception) {
-                    error = "Impossible de joindre Radio Browser"
-                } finally {
-                    loading = false
-                }
-            }
-        }
 
         fun toggleFavorite(s: Station) {
             val index = favorites.indexOfFirst { it.uuid == s.uuid }
@@ -278,7 +284,33 @@ class MainActivity : ComponentActivity() {
             if (s.uuid == currentId) togglePlayback() else play(s)
         }
 
-        LaunchedEffect(Unit) { load(query) }
+        // Recherche relancée à chaque changement de critère ; la frappe est temporisée.
+        // Un nouveau critère annule la recherche précédente (LaunchedEffect relancé).
+        LaunchedEffect(search, reload) {
+            if (search.text.isNotBlank()) delay(400)
+            loading = true
+            error = null
+            try {
+                stations = RadioBrowser.search(search)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = "Impossible de joindre Radio Browser"
+            } finally {
+                loading = false
+            }
+        }
+
+        // Régions du pays choisi (liste vide si l'annuaire ne répond pas : la puce est masquée)
+        LaunchedEffect(search.country) {
+            val country = search.country
+            regions = if (country == null) emptyList() else withContext(Dispatchers.IO) {
+                runCatching { RadioBrowser.regions(country) }.getOrDefault(emptyList())
+            }
+        }
+
+        // Pays, tri et qualité retenus d'une ouverture à l'autre
+        LaunchedEffect(search.country, search.sort, search.hd) { saveSearch(search) }
 
         val current = favorites.find { it.uuid == currentId }
             ?: stations.find { it.uuid == currentId }
@@ -343,14 +375,14 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
+                        value = search.text,
+                        onValueChange = { search = search.copy(text = it) },
                         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                        placeholder = { Text("Rechercher une radio…") },
+                        placeholder = { Text("Nom, genre, ville…") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { query = ""; load("") }) {
+                            if (search.text.isNotEmpty()) {
+                                IconButton(onClick = { search = search.copy(text = "") }) {
                                     Icon(Icons.Default.Clear, contentDescription = "Effacer")
                                 }
                             }
@@ -358,27 +390,90 @@ class MainActivity : ComponentActivity() {
                         singleLine = true,
                         shape = RoundedCornerShape(28.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); load(query) }),
+                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                     )
+                    // Genres : un appui filtre, un second appui retire le filtre
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        items(GENRES, key = { it.tag }) { g ->
+                            FilterChip(
+                                selected = search.genre == g,
+                                onClick = { search = search.copy(genre = if (search.genre == g) null else g) },
+                                label = { Text(g.label) },
+                            )
+                        }
+                    }
+                    // Pays, région, tri, qualité
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item {
+                            DropdownChip(
+                                label = search.country?.label ?: "Tous les pays",
+                                active = search.country == null || search.country != COUNTRIES.first(),
+                                options = listOf<Country?>(null) + COUNTRIES,
+                                selected = search.country,
+                                optionLabel = { it?.label ?: "Tous les pays" },
+                                onSelect = { search = search.copy(country = it, region = null) },
+                            )
+                        }
+                        if (search.country != null && regions.isNotEmpty()) {
+                            item {
+                                DropdownChip(
+                                    label = search.region ?: "Toutes les régions",
+                                    active = search.region != null,
+                                    options = listOf<String?>(null) + regions,
+                                    selected = search.region,
+                                    optionLabel = { it ?: "Toutes les régions" },
+                                    onSelect = { search = search.copy(region = it) },
+                                )
+                            }
+                        }
+                        item {
+                            DropdownChip(
+                                label = search.sort.label,
+                                active = search.sort != Sort.POPULAR,
+                                options = Sort.entries,
+                                selected = search.sort,
+                                optionLabel = { it.label },
+                                onSelect = { search = search.copy(sort = it) },
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = search.hd,
+                                onClick = { search = search.copy(hd = !search.hd) },
+                                label = { Text("HD ($HD_BITRATE kbps et +)") },
+                            )
+                        }
+                    }
                     Text(
-                        header,
+                        header(search, stations.size, loading),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
                     )
                     Box(Modifier.fillMaxSize()) {
                         when {
-                            loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                            loading && stations.isEmpty() -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                             error != null -> Column(
                                 Modifier.align(Alignment.Center),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 Text(error ?: "")
                                 Spacer(Modifier.height(12.dp))
-                                Button(onClick = { load(query) }) { Text("Réessayer") }
+                                Button(onClick = { reload++ }) { Text("Réessayer") }
                             }
-                            stations.isEmpty() -> Text("Aucune radio trouvée", Modifier.align(Alignment.Center))
-                            else -> StationList(stations, currentId, favoriteIds, ::onStationClick, ::toggleFavorite)
+                            !loading && stations.isEmpty() -> Text("Aucune radio trouvée", Modifier.align(Alignment.Center))
+                            else -> {
+                                StationList(stations, currentId, favoriteIds, ::onStationClick, ::toggleFavorite)
+                                // Nouvelle recherche en cours : la liste précédente reste affichée
+                                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+                            }
                         }
                     }
                 }
@@ -402,6 +497,55 @@ class MainActivity : ComponentActivity() {
                 onVolume = ::changeVolume,
                 onDismiss = { nowPlayingOpen = false },
             )
+        }
+    }
+}
+
+/** Titre de la liste : critères actifs et nombre de radios. */
+private fun header(s: Criteria, count: Int, loading: Boolean): String {
+    if (s.isDefault) {
+        val where = s.country?.let { "en ${it.label}" } ?: "dans le monde"
+        return listOfNotNull(
+            if (s.sort == Sort.POPULAR) "Populaires $where" else "${s.sort.label} $where",
+            "HD".takeIf { s.hd },
+        ).joinToString(" · ")
+    }
+    val criteria = listOfNotNull(
+        s.text.trim().takeIf { it.isNotEmpty() }?.let { "« $it »" },
+        s.genre?.label,
+        s.region ?: s.country?.label ?: "Tous les pays",
+        "HD".takeIf { s.hd },
+    ).joinToString(" · ")
+    if (loading) return criteria
+    return "$criteria · " + if (count >= 100) "100+ radios" else "$count radio" + if (count > 1) "s" else ""
+}
+
+/** Puce qui ouvre une liste de choix ; [active] la met en évidence quand le choix diffère du défaut. */
+@Composable
+private fun <T> DropdownChip(
+    label: String,
+    active: Boolean,
+    options: List<T>,
+    selected: T,
+    optionLabel: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = active,
+            onClick = { open = true },
+            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel(option)) },
+                    onClick = { open = false; onSelect(option) },
+                    leadingIcon = { if (option == selected) Icon(Icons.Default.Check, contentDescription = null) },
+                )
+            }
         }
     }
 }

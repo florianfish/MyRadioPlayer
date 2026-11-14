@@ -5,6 +5,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.RectF
 import com.caverock.androidsvg.SVG
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -24,6 +28,10 @@ data class Station(
     val bitrate: Int,
     /** Flux HLS (.m3u8) selon l'annuaire : sert au type MIME envoyé au Cast. */
     val hls: Boolean = false,
+    /** Région selon l'annuaire, nombre d'écoutes et de votes : servent au tri des recherches fusionnées. */
+    val state: String = "",
+    val clicks: Int = 0,
+    val votes: Int = 0,
 ) {
     val subtitle: String
         get() = listOfNotNull(
@@ -103,6 +111,50 @@ object Tags {
         .joinToString(", ") { tag -> tag.replaceFirstChar { it.titlecase() } }
 }
 
+/** Tri des résultats (valeur `order` de l'API). */
+enum class Sort(val label: String, val api: String) {
+    POPULAR("Populaires", "clickcount"),
+    VOTES("Mieux notées", "votes"),
+    NAME("Nom", "name"),
+}
+
+/** Genre proposé en puce : libellé affiché et tag cherché dans l'annuaire. */
+data class Genre(val label: String, val tag: String)
+
+/** Pays proposé : code ISO (filtre des stations) et nom anglais de l'annuaire (liste des régions). */
+data class Country(val code: String, val label: String, val apiName: String)
+
+val GENRES = listOf(
+    Genre("Info", "news"), Genre("Pop", "pop"), Genre("Rock", "rock"), Genre("Jazz", "jazz"),
+    Genre("Classique", "classical"), Genre("Électro", "electronic"), Genre("Dance", "dance"),
+    Genre("Rap", "hip hop"), Genre("Années 80", "80s"), Genre("Rétro", "oldies"),
+    Genre("Sport", "sport"), Genre("Chill", "chill"), Genre("Enfants", "kids"),
+)
+
+val COUNTRIES = listOf(
+    Country("FR", "France", "France"), Country("BE", "Belgique", "Belgium"),
+    Country("CH", "Suisse", "Switzerland"), Country("LU", "Luxembourg", "Luxembourg"),
+    Country("CA", "Canada", "Canada"), Country("GB", "Royaume-Uni", "The United Kingdom Of Great Britain And Northern Ireland"),
+    Country("US", "États-Unis", "The United States Of America"), Country("DE", "Allemagne", "Germany"),
+    Country("ES", "Espagne", "Spain"), Country("IT", "Italie", "Italy"), Country("PT", "Portugal", "Portugal"),
+)
+
+/** Critères de l'onglet Découvrir. [country] null : tous les pays. */
+data class Criteria(
+    val text: String = "",
+    val genre: Genre? = null,
+    val country: Country? = COUNTRIES.first(),
+    val region: String? = null,
+    val sort: Sort = Sort.POPULAR,
+    val hd: Boolean = false,
+) {
+    /** Aucun critère choisi : liste d'accueil. */
+    val isDefault: Boolean get() = text.isBlank() && genre == null && region == null
+}
+
+/** Débit minimal du filtre « HD ». */
+const val HD_BITRATE = 96
+
 /** Client minimal pour https://api.radio-browser.info */
 object RadioBrowser {
     private val hosts = listOf(
@@ -112,13 +164,58 @@ object RadioBrowser {
         "at1.api.radio-browser.info",
     )
 
-    fun popular(countryCode: String): List<Station> =
-        parse(get("/json/stations/search?countrycode=$countryCode&order=clickcount&reverse=true&limit=100&hidebroken=true"))
-
-    fun search(query: String): List<Station> {
-        val q = URLEncoder.encode(query, "UTF-8")
-        return parse(get("/json/stations/search?name=$q&order=clickcount&reverse=true&limit=100&hidebroken=true"))
+    /**
+     * Recherche de l'onglet Découvrir. Le texte est cherché dans le nom, les genres et la région
+     * (trois requêtes en parallèle, fusionnées puis retriées) : « jazz » ou « Bretagne » trouvent
+     * aussi les stations qui n'ont pas le mot dans leur nom.
+     */
+    suspend fun search(s: Criteria): List<Station> = coroutineScope {
+        val base = buildMap {
+            s.genre?.let { put("tag", it.tag) }
+            s.country?.let { put("countrycode", it.code) }
+            s.region?.let { put("state", it) }
+            if (s.hd) put("bitrateMin", HD_BITRATE.toString())
+            put("order", s.sort.api)
+            put("reverse", (s.sort != Sort.NAME).toString())
+            put("limit", "100")
+            put("hidebroken", "true")
+        }
+        val text = s.text.trim()
+        val variants = if (text.isEmpty()) listOf(base) else listOfNotNull(
+            base + ("name" to text),
+            (base + ("tag" to text)).takeIf { s.genre == null },
+            (base + ("state" to text)).takeIf { s.region == null },
+        )
+        val results = variants.map { params ->
+            async(Dispatchers.IO) { runCatching { parse(get("/json/stations/search?" + encode(params))) } }
+        }.awaitAll()
+        // Toutes les requêtes en échec : on remonte l'erreur (sinon résultats partiels)
+        if (results.all { it.isFailure }) results.first().getOrThrow()
+        val merged = results.flatMap { it.getOrDefault(emptyList()) }.distinctBy { it.uuid }
+        if (variants.size == 1) return@coroutineScope merged
+        when (s.sort) {
+            Sort.POPULAR -> merged.sortedByDescending { it.clicks }
+            Sort.VOTES -> merged.sortedByDescending { it.votes }
+            Sort.NAME -> merged.sortedBy { it.name.lowercase() }
+        }
     }
+
+    /** Régions d'un pays ayant au moins quelques stations, par ordre alphabétique. */
+    fun regions(country: Country): List<String> {
+        val name = URLEncoder.encode(country.apiName, "UTF-8").replace("+", "%20")
+        val arr = JSONArray(get("/json/states/$name/?order=stationcount&reverse=true&hidebroken=true"))
+        return (0 until arr.length())
+            .map { arr.getJSONObject(it) }
+            .filter { it.optInt("stationcount") >= 3 }
+            .map { it.optString("name").trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+            .take(80)
+            .sortedBy { it.lowercase() }
+    }
+
+    private fun encode(params: Map<String, String>) =
+        params.entries.joinToString("&") { (k, v) -> k + "=" + URLEncoder.encode(v, "UTF-8") }
 
     /** Signale l'écoute à Radio Browser (demandé par l'API pour le classement). */
     fun countClick(uuid: String) {
@@ -226,6 +323,9 @@ object RadioBrowser {
                 codec = o.optString("codec"),
                 bitrate = o.optInt("bitrate"),
                 hls = o.optInt("hls") == 1,
+                state = o.optString("state").trim(),
+                clicks = o.optInt("clickcount"),
+                votes = o.optInt("votes"),
             )
         }.distinctBy { it.uuid }
     }
