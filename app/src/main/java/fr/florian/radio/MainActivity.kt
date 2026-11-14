@@ -184,7 +184,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) { RadioBrowser.countClick(s.uuid) }
     }
 
-    private fun setVolume(v: Int) {
+    private fun changeVolume(v: Int) {
         controller?.setDeviceVolume(v, 0)
     }
 
@@ -379,7 +379,7 @@ class MainActivity : ComponentActivity() {
                 maxVolume = maxVolume,
                 onFavorite = { current?.let(::toggleFavorite) },
                 onToggle = ::togglePlayback,
-                onVolume = ::setVolume,
+                onVolume = ::changeVolume,
                 onDismiss = { nowPlayingOpen = false },
             )
         }
