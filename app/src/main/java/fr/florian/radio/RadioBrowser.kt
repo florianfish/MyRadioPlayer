@@ -226,3 +226,25 @@ object RadioBrowser {
         }.distinctBy { it.uuid }
     }
 }
+
+/** Recherche de pochette via l'API publique iTunes Search (sans clé). */
+object CoverArt {
+    /** Adresse d'une pochette 600 px pour « Artiste - Titre », ou null. */
+    fun find(track: String): String? {
+        // Seulement les annonces au format « artiste - titre » : évite les pochettes au hasard sur un slogan
+        if (" - " !in track && " – " !in track) return null
+        val q = URLEncoder.encode(track.replace(" – ", " ").replace(" - ", " "), "UTF-8")
+        val conn = URL("https://itunes.apple.com/search?term=$q&media=music&entity=song&limit=1&country=FR")
+            .openConnection() as HttpURLConnection
+        conn.connectTimeout = 5_000
+        conn.readTimeout = 8_000
+        try {
+            if (conn.responseCode != 200) return null
+            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val art = json.optJSONArray("results")?.optJSONObject(0)?.optString("artworkUrl100").orEmpty()
+            return art.takeIf { it.startsWith("http") }?.replace("100x100bb", "600x600bb")
+        } finally {
+            conn.disconnect()
+        }
+    }
+}

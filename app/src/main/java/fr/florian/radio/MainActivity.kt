@@ -11,10 +11,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,8 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -60,6 +65,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import kotlin.math.roundToInt
 
 private const val FAVORITES_KEY = "favorites"
 private const val TAB_FAVORITES = 0
@@ -77,6 +83,8 @@ class MainActivity : ComponentActivity() {
     private var currentInfo by mutableStateOf<String?>(null)
     private var currentTrack by mutableStateOf<String?>(null)
     private var currentArt by mutableStateOf<String?>(null)
+    private var volume by mutableIntStateOf(0)
+    private var maxVolume by mutableIntStateOf(0)
 
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
     private var favorites by mutableStateOf<List<Station>>(emptyList())
@@ -153,6 +161,12 @@ class MainActivity : ComponentActivity() {
         // `artist` vaut la description de la station, ou le morceau annoncé par le flux (cf. PlaybackService)
         currentTrack = md?.artist?.toString()?.takeIf { it.isNotBlank() && it != currentInfo }
         currentArt = item?.mediaMetadata?.artworkUri?.toString()
+        if (p.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME)) {
+            volume = p.deviceVolume
+            maxVolume = p.deviceInfo.maxVolume
+        } else {
+            maxVolume = 0
+        }
     }
 
     private fun saveFavorites(list: List<Station>) {
@@ -168,6 +182,10 @@ class MainActivity : ComponentActivity() {
         lastStation = s
         LastStation.save(this, s)
         lifecycleScope.launch(Dispatchers.IO) { RadioBrowser.countClick(s.uuid) }
+    }
+
+    private fun setVolume(v: Int) {
+        controller?.setDeviceVolume(v, 0)
     }
 
     /** Radio en direct : on coupe le flux (stop) plutôt que pause, pour repartir en live. */
@@ -189,6 +207,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun RadioScreen() {
+        var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
         var tab by rememberSaveable { mutableStateOf(if (favorites.isEmpty()) TAB_DISCOVER else TAB_FAVORITES) }
         var query by rememberSaveable { mutableStateOf("") }
         var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
@@ -261,6 +280,7 @@ class MainActivity : ComponentActivity() {
                         favorite = current?.let { it.uuid in favoriteIds },
                         onFavorite = { current?.let(::toggleFavorite) },
                         onToggle = ::togglePlayback,
+                        onOpen = { nowPlayingOpen = true },
                     )
                 }
             },
@@ -343,6 +363,25 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
+        val name = currentName
+        if (nowPlayingOpen && name != null) {
+            NowPlayingSheet(
+                name = name,
+                logos = current?.logoUrls ?: listOfNotNull(currentArt),
+                track = currentTrack,
+                info = currentInfo,
+                playing = isPlaying,
+                buffering = isBuffering,
+                favorite = current?.let { it.uuid in favoriteIds },
+                volume = volume,
+                maxVolume = maxVolume,
+                onFavorite = { current?.let(::toggleFavorite) },
+                onToggle = ::togglePlayback,
+                onVolume = ::setVolume,
+                onDismiss = { nowPlayingOpen = false },
+            )
         }
     }
 }
@@ -441,7 +480,10 @@ private const val SHARP_LOGO_PX = 64
  */
 @Composable
 private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
-    val key = urls.joinToString("|")
+    val big = size > 100.dp
+    // Écran de lecture : logo téléchargé en plus grand, mis en cache à part
+    val px = if (big) 512 else 144
+    val key = urls.joinToString("|") + "@" + px
     val logo by produceState(logoCache.get(key), key) {
         // produceState garde l'ancienne valeur quand la clé change (barre de lecture : changement de station)
         value = logoCache.get(key)
@@ -449,7 +491,7 @@ private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
             val image = withContext(Dispatchers.IO) {
                 var best: ImageBitmap? = null
                 for (url in urls) {
-                    val img = runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull() ?: continue
+                    val img = runCatching { RadioBrowser.logo(url, px)?.asImageBitmap() }.getOrNull() ?: continue
                     if (maxOf(img.width, img.height) >= SHARP_LOGO_PX) return@withContext img
                     if (best == null || img.width > best.width) best = img
                 }
@@ -467,16 +509,21 @@ private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
     Box(
         Modifier
             .size(size)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(if (big) 28.dp else 12.dp))
             .background(if (image != null) Color.White else MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         if (image != null) {
-            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
+            Image(
+                image,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().padding(if (big) size / 10 else 4.dp),
+                contentScale = ContentScale.Fit,
+            )
         } else {
             Text(
                 name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "♪",
-                style = MaterialTheme.typography.titleMedium,
+                style = if (big) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 fontWeight = FontWeight.Bold,
             )
@@ -494,8 +541,19 @@ private fun PlayerBar(
     favorite: Boolean?,
     onFavorite: () -> Unit,
     onToggle: () -> Unit,
+    onOpen: () -> Unit,
 ) {
     Surface(
+        // Toucher ou glisser vers le haut : écran de lecture en grand
+        modifier = Modifier
+            .clickable(onClick = onOpen)
+            .pointerInput(Unit) {
+                var drag = 0f
+                detectVerticalDragGestures(onDragStart = { drag = 0f }) { _, dy ->
+                    drag += dy
+                    if (drag < -40f) onOpen()
+                }
+            },
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         shadowElevation = 8.dp,
@@ -552,4 +610,160 @@ private val PauseIcon: ImageVector by lazy {
             moveTo(14f, 5f); verticalLineTo(19f); horizontalLineTo(18f); verticalLineTo(5f); close()
         }
     }
+}
+
+/** Pochettes déjà cherchées (null : rien trouvé), par morceau. */
+private val coverCache = LruCache<String, Any>(30)
+private object NoCover
+
+/**
+ * Écran de lecture en grand, ouvert depuis la barre de lecture (toucher ou glisser vers le haut),
+ * fermé en glissant vers le bas. Pochette du morceau si on la trouve, sinon logo de la station.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NowPlayingSheet(
+    name: String,
+    logos: List<String>,
+    track: String?,
+    info: String?,
+    playing: Boolean,
+    buffering: Boolean,
+    favorite: Boolean?,
+    volume: Int,
+    maxVolume: Int,
+    onFavorite: () -> Unit,
+    onToggle: () -> Unit,
+    onVolume: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1f).padding(8.dp)) {
+                val cover = rememberCover(track)
+                Crossfade(cover, label = "pochette") { image ->
+                    if (image != null) {
+                        Image(
+                            image,
+                            contentDescription = "Pochette",
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        StationLogo(name, logos, maxWidth)
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when {
+                    buffering -> "Connexion…"
+                    !playing -> "Arrêté"
+                    else -> track ?: "En direct"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(),
+            )
+            if (!info.isNullOrBlank()) {
+                Text(
+                    info,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(28.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Emplacements de même largeur de part et d'autre pour garder le bouton centré
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (favorite != null) FavoriteButton(favorite, onFavorite)
+                }
+                FilledIconButton(onClick = onToggle, modifier = Modifier.size(80.dp)) {
+                    if (buffering) {
+                        CircularProgressIndicator(
+                            Modifier.size(32.dp),
+                            strokeWidth = 3.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            if (playing) PauseIcon else Icons.Default.PlayArrow,
+                            contentDescription = if (playing) "Arrêter" else "Lecture",
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.size(48.dp))
+            }
+            // Volume média du téléphone (le même que les boutons physiques)
+            if (maxVolume > 0) {
+                Spacer(Modifier.height(28.dp))
+                var dragged by remember { mutableStateOf<Float?>(null) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(VolumeDownIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(
+                        value = dragged ?: volume.toFloat(),
+                        onValueChange = { dragged = it; onVolume(it.roundToInt()) },
+                        onValueChangeFinished = { dragged = null },
+                        valueRange = 0f..maxVolume.toFloat(),
+                        steps = (maxVolume - 1).coerceAtLeast(0),
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    )
+                    Icon(VolumeUpIcon, contentDescription = "Volume", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** Pochette du morceau [track] (iTunes), null tant qu'elle n'est pas trouvée. */
+@Composable
+private fun rememberCover(track: String?): ImageBitmap? {
+    val cover by produceState(track?.let { coverCache.get(it) as? ImageBitmap }, track) {
+        value = track?.let { coverCache.get(it) as? ImageBitmap }
+        if (track == null || coverCache.get(track) != null) return@produceState
+        val image = withContext(Dispatchers.IO) {
+            runCatching { CoverArt.find(track)?.let { RadioBrowser.logo(it, 600)?.asImageBitmap() } }.getOrNull()
+        }
+        coverCache.put(track, image ?: NoCover)
+        value = image
+    }
+    return cover
+}
+
+private fun vectorIcon(name: String, path: String): ImageVector = materialIcon(name) {
+    addPath(addPathNodes(path), fill = SolidColor(Color.Black))
+}
+
+private val VolumeDownIcon by lazy {
+    vectorIcon("VolumeDown", "M18.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02zM5,9v6h4l5,5V4L9,9H5z")
+}
+
+private val VolumeUpIcon by lazy {
+    vectorIcon(
+        "VolumeUp",
+        "M3,9v6h4l5,5V4L7,9H3zM16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02z" +
+            "M14,3.23v2.06c2.89,0.86 5,3.54 5,6.71s-2.11,5.85 -5,6.71v2.06c4.01,-0.91 7,-4.49 7,-8.77s-2.99,-7.86 -7,-8.77z",
+    )
 }
