@@ -46,6 +46,10 @@ Obtainium vérifie ensuite les releases en arrière-plan et notifie quand une no
 
 ### Publier une version
 
+**Le plus simple, depuis le téléphone ou le navigateur :** onglet **Actions** → workflow **Release APK** → **Run workflow** (branche `main`) → choisir le type de version → **Run workflow**. Le workflow prend le dernier tag (ex. `v1.4.0`), calcule le suivant (**mineure** `v1.5.0`, **correctif** `v1.4.1`, **majeure** `v2.0.0`), compile l'APK signé et publie la release avec le tag et les notes générées.
+
+Autres façons de faire, en ligne de commande :
+
 ```bash
 git tag v1.1
 git push origin v1.1
