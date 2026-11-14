@@ -54,4 +54,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-session:$media3")
+    implementation("androidx.media3:media3-cast:$media3") // Google Cast
+    implementation("androidx.appcompat:appcompat:1.7.1") // thème AppCompat requis par les dialogues Cast
 }
