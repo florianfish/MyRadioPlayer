@@ -3,8 +3,12 @@ package fr.florian.radio
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -13,12 +17,16 @@ import androidx.media3.cast.CastPlayer
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Metadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.session.MediaSession
@@ -42,7 +50,10 @@ class PlaybackService : MediaSessionService() {
             .setReadTimeoutMs(15_000)
 
         val exoPlayer = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http))
+                    .setLoadErrorHandlingPolicy(PatientRetryPolicy())
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -61,6 +72,7 @@ class PlaybackService : MediaSessionService() {
         val player: Player = runCatching { CastPlayer.Builder(this).setLocalPlayer(exoPlayer).build() }
             .getOrElse { exoPlayer }
         player.addListener(NowPlayingListener(player))
+        resumeOnNetwork = ResumeOnNetwork(this, player)
 
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
@@ -103,6 +115,8 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
+    private var resumeOnNetwork: ResumeOnNetwork? = null
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     /**
@@ -116,6 +130,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        resumeOnNetwork?.release()
         session?.run {
             player.release()
             release()
@@ -246,5 +261,58 @@ private class NowPlayingListener(private val player: Player) : Player.Listener {
     private fun clean(raw: String): String {
         val s = raw.trim()
         return if (s.none { it.isLetterOrDigit() }) "" else s
+    }
+}
+
+/** Erreurs dues au réseau (et non au flux lui-même) : la lecture peut reprendre au retour du réseau. */
+val NETWORK_ERRORS = setOf(
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+    PlaybackException.ERROR_CODE_TIMEOUT,
+)
+
+/**
+ * Coupures réseau (tunnel, passage Wi-Fi <-> 4G) : ExoPlayer réessaie de charger le flux pendant
+ * environ 1 min 30 (1, 2, 4, 8 puis 15 s entre les tentatives) en restant « en connexion », au
+ * lieu d'abandonner après quelques secondes. Les erreurs définitives (404, format…) ne sont pas réessayées.
+ */
+@UnstableApi
+private class PatientRetryPolicy : DefaultLoadErrorHandlingPolicy(RETRIES) {
+    override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+        val e = loadErrorInfo.exception
+        if (e is HttpDataSource.InvalidResponseCodeException && e.responseCode in 400..499) return C.TIME_UNSET
+        if (super.getRetryDelayMsFor(loadErrorInfo) == C.TIME_UNSET) return C.TIME_UNSET
+        return minOf(1_000L shl (loadErrorInfo.errorCount - 1).coerceIn(0, 4), 15_000L)
+    }
+
+    private companion object {
+        const val RETRIES = 10
+    }
+}
+
+/**
+ * Filet de sécurité : si les tentatives sont épuisées (coupure longue), la lecture reprend
+ * dès que le réseau revient, à condition que l'utilisateur n'ait pas arrêté la radio entre-temps.
+ */
+private class ResumeOnNetwork(context: Context, private val player: Player) : ConnectivityManager.NetworkCallback() {
+    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val main = Handler(Looper.getMainLooper())
+
+    init {
+        runCatching { connectivity.registerDefaultNetworkCallback(this) }
+    }
+
+    override fun onAvailable(network: Network) {
+        // Rappel sur un autre fil : le lecteur se pilote depuis le fil principal
+        main.post {
+            val error = player.playerError ?: return@post
+            if (player.playWhenReady && error.errorCode in NETWORK_ERRORS) player.prepare()
+        }
+    }
+
+    fun release() {
+        runCatching { connectivity.unregisterNetworkCallback(this) }
+        main.removeCallbacksAndMessages(null)
     }
 }

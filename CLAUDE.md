@@ -31,5 +31,6 @@ Single module `:app`, package `fr.florian.radio`, three files (header and now-pl
 - `MainActivity.kt` — whole Compose UI. Talks to the service only through a `MediaController` connected in `onStart` / released in `onStop`; player state is mirrored into Compose state via `syncState`. `NowPlayingSheet` (a `ModalBottomSheet`, opened by tapping or dragging up the `PlayerBar`) shows big cover/logo, controls and a device-volume slider. Live radio: the play/pause button calls `stop()` (not `pause()`) so resuming restarts at the live edge.
 
 Cleartext HTTP is allowed in the manifest (`usesCleartextTraffic`) since many streams are plain HTTP.
+Network drops: `PatientRetryPolicy` (load error policy, 10 retries, 1→15 s backoff, no retry on 4xx) keeps the player buffering ~1.5 min instead of failing; if it still fails with a `NETWORK_ERRORS` code, `ResumeOnNetwork` (in `PlaybackService.kt`) calls `prepare()` when the default network comes back, only if `playWhenReady`. The UI shows « Reconnexion… » (buffering after having played this item) and « En attente du réseau… ».
 
 Version label: debug builds get a `-debug` versionName suffix, plus `.<GITHUB_RUN_NUMBER>` on CI. `buildConfig` is enabled so the UI shows `BuildConfig.VERSION_NAME` next to the title.
