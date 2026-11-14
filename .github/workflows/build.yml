@@ -23,6 +23,14 @@ jobs:
           gradle-version: "9.9.1"
       # Les deux variantes : « full » (avec Cast) et « fdroid » (100 % libre)
       - run: gradle assembleFullDebug assembleFdroidDebug --no-daemon
+      # La variante F-Droid ne doit embarquer aucune bibliothèque Google Play (non libre)
+      - name: Vérifier la variante fdroid
+        run: |
+          gradle -q :app:dependencies --configuration fdroidReleaseRuntimeClasspath --no-daemon > fdroid-deps.txt
+          if grep -iE "com\.google\.android\.gms|firebase|media3-cast" fdroid-deps.txt; then
+            echo "::error::Dépendance non libre dans la variante fdroid"; exit 1
+          fi
+          echo "Variante fdroid : $(grep -c -- '--- ' fdroid-deps.txt) dépendances, aucune non libre"
       - uses: actions/upload-artifact@v7
         id: apk
         with:
