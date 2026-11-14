@@ -4,7 +4,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 
 ## Fonctionnalités
 
-- **Découvrir** : stations les plus écoutées en France à l'ouverture, recherche par nom dans tout l'annuaire.
+- **Découvrir** : stations les plus écoutées en France à l'ouverture. Recherche instantanée dans le nom, les genres et la région (« jazz », « Bretagne »), puces de genres, choix du pays et de la région, tri (populaires, mieux notées, nom) et filtre HD (96 kbps et plus). Pays, tri et filtre HD sont retenus.
 - **Favoris** : un cœur sur chaque station pour l'ajouter ou la retirer, avec « Annuler » après un retrait. Les favoris sont stockés sur le téléphone et s'affichent même hors ligne.
 - **Lecture en arrière-plan** : notification média, contrôles sur l'écran de verrouillage et depuis les écouteurs Bluetooth. La lecture se met en pause quand les écouteurs sont débranchés, et s'arrête quand on ferme l'appli depuis les applis récentes.
 - **Direct** : « Arrêter » coupe le flux au lieu de le mettre en pause, pour reprendre au direct à la relance.
