@@ -3,6 +3,7 @@ package fr.florian.radio
 import android.Manifest
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.LruCache
@@ -86,6 +87,7 @@ class MainActivity : ComponentActivity() {
     private var volume by mutableIntStateOf(0)
     private var maxVolume by mutableIntStateOf(0)
 
+    private val audio by lazy { getSystemService(AudioManager::class.java) }
     private val prefs by lazy { getSharedPreferences("radio", MODE_PRIVATE) }
     private var favorites by mutableStateOf<List<Station>>(emptyList())
     private var lastStation by mutableStateOf<Station?>(null)
@@ -161,12 +163,9 @@ class MainActivity : ComponentActivity() {
         // `artist` vaut la description de la station, ou le morceau annoncé par le flux (cf. PlaybackService)
         currentTrack = md?.artist?.toString()?.takeIf { it.isNotBlank() && it != currentInfo }
         currentArt = item?.mediaMetadata?.artworkUri?.toString()
-        if (p.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME)) {
-            volume = p.deviceVolume
-            maxVolume = p.deviceInfo.maxVolume
-        } else {
-            maxVolume = 0
-        }
+        // Volume média lu directement : les événements du lecteur (boutons physiques compris) déclenchent ce rafraîchissement
+        volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
     }
 
     private fun saveFavorites(list: List<Station>) {
@@ -184,8 +183,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) { RadioBrowser.countClick(s.uuid) }
     }
 
+    /** Réglé via AudioManager : l'ordre de volume passé par la session Media3 n'était pas appliqué. */
     private fun changeVolume(v: Int) {
-        controller?.setDeviceVolume(v, 0)
+        // SecurityException possible en mode Ne pas déranger
+        runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) }
+        volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
     }
 
     /** Radio en direct : on coupe le flux (stop) plutôt que pause, pour repartir en live. */
