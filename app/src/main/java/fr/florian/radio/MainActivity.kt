@@ -66,7 +66,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.cast.MediaRouteButton
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -383,8 +382,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.alignByBaseline(),
                     )
                     Spacer(Modifier.weight(1f))
-                    // Bouton Google Cast : visible quand un appareil compatible est sur le réseau
-                    MediaRouteButton(modifier = Modifier.align(Alignment.CenterVertically))
+                    // Bouton Google Cast (variante « full » seulement) : visible quand un appareil compatible est sur le réseau
+                    CastButton(modifier = Modifier.align(Alignment.CenterVertically))
                 }
                 PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                     Tab(
@@ -996,7 +995,7 @@ private fun NowPlayingSheet(
                         )
                     }
                 }
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { MediaRouteButton() }
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { CastButton() }
             }
             // Volume (téléphone, ou appareil casté) du téléphone (le même que les boutons physiques)
             if (maxVolume > 0) {

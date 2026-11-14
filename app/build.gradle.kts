@@ -10,9 +10,27 @@ android {
         applicationId = "fr.florian.radio"
         minSdk = 26
         targetSdk = 34
-        // Fournis par le workflow de release (numéro de run, tag sans le « v »)
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VERSION_NAME") ?: "1.0"
+        // Version : variable VERSION_NAME (workflow de release) ou propriété -PappVersion (F-Droid), tag sans le « v ».
+        // versionCode déduit du numéro (1.8.0 -> 10800) : identique quel que soit l'outil qui compile.
+        val version = System.getenv("VERSION_NAME") ?: (project.findProperty("appVersion") as String?) ?: "1.0"
+        versionName = version
+        versionCode = version.split('.').map { it.toIntOrNull() ?: 0 }.let { (it + listOf(0, 0, 0)).take(3) }
+            .let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
+            .coerceAtLeast(1)
+    }
+    // Deux variantes : « full » avec Google Cast (GitHub, Obtainium) et « fdroid » 100 % libre,
+    // sans Cast ni services en ligne non libres (pochettes iTunes, icônes Google)
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("full") {
+            dimension = "distribution"
+            isDefault = true
+            buildConfigField("boolean", "NON_FREE_NET", "true")
+        }
+        create("fdroid") {
+            dimension = "distribution"
+            buildConfigField("boolean", "NON_FREE_NET", "false")
+        }
     }
     // Clé fixe pour que chaque release s'installe par-dessus la précédente (sinon désinstallation = favoris perdus)
     signingConfigs {
@@ -54,6 +72,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-session:$media3")
-    implementation("androidx.media3:media3-cast:$media3") // Google Cast
-    implementation("androidx.appcompat:appcompat:1.7.1") // thème AppCompat requis par les dialogues Cast
+    "fullImplementation"("androidx.media3:media3-cast:$media3") // Google Cast (non libre : pas dans la variante fdroid)
+    implementation("androidx.appcompat:appcompat:1.7.1") // thème AppCompat (requis par les dialogues Cast)
 }
