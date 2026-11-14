@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
                 currentName?.let { name ->
                     PlayerBar(
                         name = name,
-                        art = currentArt,
+                        logos = current?.logoUrls ?: listOfNotNull(currentArt),
                         status = statusText(),
                         playing = isPlaying,
                         buffering = isBuffering,
@@ -374,7 +374,7 @@ private fun StationRow(s: Station, current: Boolean, favorite: Boolean, onClick:
         } else {
             ListItemDefaults.colors()
         },
-        leadingContent = { StationLogo(s.name, s.favicon) },
+        leadingContent = { StationLogo(s.name, s.logoUrls) },
         headlineContent = {
             Text(
                 s.name,
@@ -426,16 +426,27 @@ private fun EmptyFavorites(onDiscover: () -> Unit) {
     }
 }
 
-// shortcut: cache mémoire seulement, les échecs ne sont pas mémorisés (re-tentés au scroll) ; passer à Coil si besoin d'un cache disque.
+// shortcut: cache mémoire seulement (pas de cache disque) ; passer à Coil si besoin.
+// Clé : la liste des adresses candidates d'une station. Les échecs sont mémorisés pour la session,
+// pour ne pas retenter trois téléchargements à chaque défilement.
 private val logoCache = LruCache<String, ImageBitmap>(200)
+private val failedLogos = HashSet<String>()
 
+/** Logo de la station : essaie chaque adresse de [urls] dans l'ordre, sinon initiale du nom. */
 @Composable
-private fun StationLogo(name: String, url: String?, size: Dp = 48.dp) {
-    val logo by produceState(url?.let { logoCache.get(it) }, url) {
-        if (value == null && url != null) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull()
-            }?.also { logoCache.put(url, it) }
+private fun StationLogo(name: String, urls: List<String>, size: Dp = 48.dp) {
+    val key = urls.joinToString("|")
+    val logo by produceState(logoCache.get(key), key) {
+        if (value == null && urls.isNotEmpty() && key !in failedLogos) {
+            val image = withContext(Dispatchers.IO) {
+                urls.firstNotNullOfOrNull { url -> runCatching { RadioBrowser.logo(url)?.asImageBitmap() }.getOrNull() }
+            }
+            if (image != null) {
+                logoCache.put(key, image)
+                value = image
+            } else {
+                failedLogos.add(key)
+            }
         }
     }
     val image = logo
@@ -462,7 +473,7 @@ private fun StationLogo(name: String, url: String?, size: Dp = 48.dp) {
 @Composable
 private fun PlayerBar(
     name: String,
-    art: String?,
+    logos: List<String>,
     status: String,
     playing: Boolean,
     buffering: Boolean,
@@ -479,7 +490,7 @@ private fun PlayerBar(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StationLogo(name, art, 52.dp)
+            StationLogo(name, logos, 52.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
