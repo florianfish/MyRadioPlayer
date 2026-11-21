@@ -289,7 +289,7 @@ object RadioBrowser {
         for (host in hosts) {
             try {
                 val conn = URL("https://$host$path").openConnection() as HttpURLConnection
-                conn.setRequestProperty("User-Agent", "SimpleRadio/1.0")
+                conn.setRequestProperty("User-Agent", "MyRadioPlayer/1.0")
                 conn.connectTimeout = 8_000
                 conn.readTimeout = 10_000
                 try {

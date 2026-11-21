@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: write
     with:
-      apk-name: SimpleRadio
+      apk-name: MyRadioPlayer
       type: ${{ inputs.type }}
       gradle-version: "9.9.1"
     secrets: inherit

@@ -20,7 +20,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Sur le 
 
 ## Installation
 
-Depuis le téléphone, ouvrir la page [**Releases**](https://github.com/florianfish/MyRadioPlayer/releases) du dépôt, télécharger `SimpleRadio-vX.Y.apk` de la dernière version (les fichiers APK portent encore l'ancien nom du projet), puis l'installer en autorisant les sources inconnues. Les versions suivantes s'installent par-dessus, sans perdre les favoris.
+Depuis le téléphone, ouvrir la page [**Releases**](https://github.com/florianfish/MyRadioPlayer/releases) du dépôt, télécharger `MyRadioPlayer-vX.Y.apk` de la dernière version (`SimpleRadio-vX.Y.apk` pour les versions publiées sous l'ancien nom du projet), puis l'installer en autorisant les sources inconnues. Les versions suivantes s'installent par-dessus, sans perdre les favoris.
 
 Android 8.0 (API 26) minimum. Au premier lancement, autoriser les notifications (Android 13+) pour garder les contrôles de lecture.
 
@@ -46,8 +46,8 @@ Obtainium vérifie ensuite les releases en arrière-plan et notifie quand une no
 
 Les deux workflows appellent les workflows partagés de [Forge-Apk](https://github.com/florianfish/Forge-Apk), communs à mes applis Android.
 
-- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` et sur chaque pull request (artefact `SimpleRadio-apk`, ou lancement manuel avec **Run workflow**). Sur une pull request, un commentaire donne le lien de téléchargement de l'APK, mis à jour à chaque nouveau commit.
-- À chaque push sur `main`, la pré-release **debug** est remplacée : le dernier APK de debug est toujours au même lien, [SimpleRadio-debug.apk](https://github.com/florianfish/MyRadioPlayer/releases/download/debug/SimpleRadio-debug.apk). Les APK de debug sont signés avec une clé de debug fixe : chacun s'installe par-dessus le précédent, mais pas par-dessus une release (clé différente).
+- `.github/workflows/build.yml` compile un APK de debug à chaque push sur `main` et sur chaque pull request (artefact `MyRadioPlayer-apk`, ou lancement manuel avec **Run workflow**). Sur une pull request, un commentaire donne le lien de téléchargement de l'APK, mis à jour à chaque nouveau commit.
+- À chaque push sur `main`, la pré-release **debug** est remplacée : le dernier APK de debug est toujours au même lien, [MyRadioPlayer-debug.apk](https://github.com/florianfish/MyRadioPlayer/releases/download/debug/MyRadioPlayer-debug.apk). Les APK de debug sont signés avec une clé de debug fixe : chacun s'installe par-dessus le précédent, mais pas par-dessus une release (clé différente).
 - `.github/workflows/release.yml` publie une **Release** avec l'APK signé à chaque tag `v*`.
 
 ### Publier une version
@@ -65,7 +65,7 @@ Le nom de version vient du tag (`1.1`) et le `versionCode` du numéro d'exécuti
 
 - Le tag **doit commencer par `v`** : un tag `1.1` ne déclenche aucun build.
 - Depuis l'interface GitHub (sans ordinateur) : **Releases** → **Draft a new release** → **Choose a tag**, taper `v1.1` puis **Create new tag: v1.1 on publish** sur `main` → **Publish release**. La création du tag lance le workflow, qui ajoute l'APK à cette release.
-- Suivre l'exécution dans l'onglet **Actions** (workflow « Release APK ») ; une fois terminé, l'APK `SimpleRadio-v1.1.apk` est attaché à la release.
+- Suivre l'exécution dans l'onglet **Actions** (workflow « Release APK ») ; une fois terminé, l'APK `MyRadioPlayer-v1.1.apk` est attaché à la release.
 - Si le build échoue (secret manquant ou erroné…), corriger puis relancer avec **Re-run jobs** sur l'exécution, ou repousser le tag :
 
   ```bash
