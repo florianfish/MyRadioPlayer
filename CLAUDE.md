@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SimpleRadio: minimal Android internet-radio player (Kotlin, Jetpack Compose, Media3/ExoPlayer). Station search via the public Radio Browser API, background playback with a media notification. UI strings and code comments are in French — keep it that way.
+MyRadioPlayer: minimal Android internet-radio player (Kotlin, Jetpack Compose, Media3/ExoPlayer). Station search via the public Radio Browser API, background playback with a media notification. UI strings and code comments are in French — keep it that way.
+
+Formerly named SimpleRadio (old releases ship `SimpleRadio-vX.apk`). Renaming is cosmetic; never change `applicationId` / package `fr.florian.radio` or the keystore alias `simpleradio`, otherwise installed apps can no longer update in place.
 
 ## Build
 
 - No Gradle wrapper is committed: use a system `gradle` (9.9.1) with JDK 17 and Android SDK 37 (compileSdk 37, targetSdk still 34). AGP 9 has built-in Kotlin: `org.jetbrains.kotlin.android` is only declared `apply false` in the root build to pin the Kotlin version, never applied in `:app`, and there is no `kotlinOptions` block (jvmTarget follows `compileOptions`).
 - `gradle assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
 - CI workflows are thin callers of the shared reusable workflows in the public repo `florianfish/Forge-Apk` (`android-build.yml`, `android-release.yml`, called `@main`, `gradle-version: 9.9.1`). Change CI behaviour there, not here.
-- `build.yml` runs `gradle assembleDebug` on every push to `main` and on every pull request, and uploads the APK as the `SimpleRadio-apk` artifact. On a PR it also posts (then edits) a bot comment linking to that artifact. On `main` it replaces the `debug` pre-release (fixed link `releases/download/debug/SimpleRadio-debug.apk`). Debug APKs built on CI are signed with Forge-Apk's fixed debug key, so they update each other in place.
+- `build.yml` runs `gradle assembleDebug` on every push to `main` and on every pull request, and uploads the APK as the `MyRadioPlayer-apk` artifact. On a PR it also posts (then edits) a bot comment linking to that artifact. On `main` it replaces the `debug` pre-release (fixed link `releases/download/debug/MyRadioPlayer-debug.apk`). Debug APKs built on CI are signed with Forge-Apk's fixed debug key, so they update each other in place.
 - Releases: pushing a `v*` tag runs `.github/workflows/release.yml` (Forge-Apk `android-release.yml`, secrets passed with `secrets: inherit`), which builds `assembleRelease` signed with a fixed key from repo secrets and attaches the APK to a GitHub Release. Signing, `versionName` (tag without the leading `v`) and `versionCode` (workflow run number) come from env vars read in `app/build.gradle.kts`, so a local `assembleRelease` without those vars fails at signing.
 - Release procedure (full user-facing version in the README, "Publier une version"):
   - Tag must start with `v` (`git tag v1.1 && git push origin v1.1`). A tag like `1.0.0` triggers nothing.

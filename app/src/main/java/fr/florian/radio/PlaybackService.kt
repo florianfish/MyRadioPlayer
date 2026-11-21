@@ -44,7 +44,7 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
 
         val http = DefaultHttpDataSource.Factory()
-            .setUserAgent("SimpleRadio/1.0")
+            .setUserAgent("MyRadioPlayer/1.0")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(15_000)

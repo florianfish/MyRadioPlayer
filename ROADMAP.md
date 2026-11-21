@@ -1,6 +1,6 @@
 # Feuille de route
 
-Idées de fonctionnalités pour SimpleRadio, classées par rapport intérêt / effort. L'objectif reste une appli minimaliste : chaque ajout doit servir à l'écoute au quotidien.
+Idées de fonctionnalités pour MyRadioPlayer, classées par rapport intérêt / effort. L'objectif reste une appli minimaliste : chaque ajout doit servir à l'écoute au quotidien.
 
 ## Prioritaire
 
@@ -10,7 +10,7 @@ Beaucoup de flux diffusent « artiste – titre » dans leurs métadonnées ICY.
 - Faire remonter ce titre dans la notification et sur l'écran de verrouillage.
 - Effort : faible.
 
-### 2. Reconnexion automatique après une coupure réseau
+### 2. Reconnexion automatique après une coupure réseau — ✅ fait
 En 4G, en voiture ou au passage Wi-Fi ↔ mobile, le flux tombe : l'appli affiche « Impossible de lire ce flux » et s'arrête.
 - Dans `PlaybackService`, sur erreur réseau (`ERROR_CODE_IO_*`), relancer `prepare()` quelques fois avec un délai croissant (ex. 2 s, 5 s, 10 s), puis abandonner.
 - Afficher « Reconnexion… » dans la barre de lecture pendant les tentatives.
@@ -30,11 +30,11 @@ En 4G, en voiture ou au passage Wi-Fi ↔ mobile, le flux tombe : l'appli affich
 
 ## Utile
 
-### 5. Réorganiser les favoris
+### 5. Réorganiser les favoris — ✅ fait
 Les favoris restent dans l'ordre d'ajout. Permettre le glisser-déposer dans l'onglet Favoris.
 - Effort : moyen (pas de réordonnancement natif dans `LazyColumn`).
 
-### 6. Filtres de recherche
+### 6. Filtres de recherche — ✅ fait
 Aujourd'hui, la recherche ne porte que sur le nom. L'API Radio Browser permet de filtrer par tag et par pays (`tag=`, `countrycode=`).
 - Puces de genres courants (info, jazz, rock, classique…) et sélecteur de pays dans l'onglet Découvrir.
 - Effort : faible à moyen.
