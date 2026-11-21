@@ -1,6 +1,6 @@
-# SimpleRadio
+# MyRadioPlayer
 
-Lecteur de radios internet pour Android, minimaliste et sans publicité. Les stations viennent de l'annuaire libre [Radio Browser](https://www.radio-browser.info/) ; la lecture continue en arrière-plan avec une notification de contrôle.
+Lecteur de radios internet pour Android, minimaliste et sans publicité. Sur le téléphone, l'application s'appelle simplement **Radio**. Les stations viennent de l'annuaire libre [Radio Browser](https://www.radio-browser.info/) ; la lecture continue en arrière-plan avec une notification de contrôle.
 
 ## Fonctionnalités
 
@@ -20,7 +20,7 @@ Lecteur de radios internet pour Android, minimaliste et sans publicité. Les sta
 
 ## Installation
 
-Depuis le téléphone, ouvrir la page **Releases** du dépôt, télécharger `SimpleRadio-vX.Y.apk` de la dernière version, puis l'installer en autorisant les sources inconnues. Les versions suivantes s'installent par-dessus, sans perdre les favoris.
+Depuis le téléphone, ouvrir la page [**Releases**](https://github.com/florianfish/MyRadioPlayer/releases) du dépôt, télécharger `SimpleRadio-vX.Y.apk` de la dernière version (les fichiers APK portent encore l'ancien nom du projet), puis l'installer en autorisant les sources inconnues. Les versions suivantes s'installent par-dessus, sans perdre les favoris.
 
 Android 8.0 (API 26) minimum. Au premier lancement, autoriser les notifications (Android 13+) pour garder les contrôles de lecture.
 
@@ -87,7 +87,7 @@ keytool -genkeypair -v -keystore simpleradio.jks -alias simpleradio \
 Sans JDK, avec OpenSSL (fourni avec Git pour Windows : `C:\Program Files\Git\mingw64\bin\openssl.exe`) :
 
 ```bash
-openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 10000 -subj "/CN=SimpleRadio"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 10000 -subj "/CN=MyRadioPlayer"
 openssl pkcs12 -export -inkey key.pem -in cert.pem -name simpleradio -out simpleradio.jks
 rm key.pem cert.pem
 ```
@@ -121,7 +121,7 @@ Un APK de debug et un APK de release ne sont pas signés avec la même clé : po
 
 ### En local
 
-Prérequis : JDK 17, Gradle 9.9.1 et Android SDK 37. Aucun wrapper Gradle n'est versionné, il faut donc utiliser un `gradle` installé sur la machine.
+Prérequis : JDK 17, Gradle 9.9.1 et Android SDK 37 (`compileSdk` 37, `targetSdk` 34, `minSdk` 26). Le projet utilise AGP 9 avec Kotlin intégré (Kotlin 2.4). Aucun wrapper Gradle n'est versionné, il faut donc utiliser un `gradle` installé sur la machine.
 
 ```bash
 gradle assembleDebug
@@ -130,21 +130,24 @@ gradle assembleDebug
 
 ## Architecture
 
-Un seul module `:app` (Kotlin, Jetpack Compose, Media3/ExoPlayer), package `fr.florian.radio` :
+Un seul module `:app` (Kotlin, Jetpack Compose Material 3, Media3/ExoPlayer), package `fr.florian.radio`, sans bibliothèque réseau ni base de données :
 
 | Fichier | Rôle |
 |---|---|
-| `MainActivity.kt` | Interface Compose (onglets, listes, lecteur) et favoris. Pilote la lecture via un `MediaController`. |
-| `PlaybackService.kt` | `MediaSessionService` qui porte l'`ExoPlayer` et la session média. Media3 gère la notification. |
-| `RadioBrowser.kt` | Client HTTP minimal de l'API Radio Browser, avec bascule entre plusieurs serveurs. Contient aussi le modèle `Station` et le téléchargement des logos. |
+| `MainActivity.kt` | Interface Compose : onglets Favoris / Découvrir, filtres de recherche, réorganisation des favoris, barre de lecture et écran de lecture en grand (pochette, volume, bouton Cast). Pilote la lecture via un `MediaController`. |
+| `PlaybackService.kt` | `MediaSessionService` qui porte le lecteur et la session média (Media3 gère la notification). `CastPlayer` bascule entre ExoPlayer et l'appareil Cast ; reconnexion après coupure réseau, titre en cours (ICY / ID3), reprise de la dernière station. |
+| `RadioBrowser.kt` | Client HTTP minimal de l'API Radio Browser, avec bascule entre plusieurs serveurs : recherche, genres, pays et régions. Contient aussi le modèle `Station`, le téléchargement des logos (dont SVG via AndroidSVG) et la recherche de pochettes sur iTunes. |
 
-Les favoris sont enregistrés en JSON dans les `SharedPreferences` (`radio` / `favorites`), au même format que les réponses de l'API.
+Favoris, dernière station et réglages de recherche sont enregistrés dans les `SharedPreferences` (`radio`), les stations en JSON au même format que les réponses de l'API.
+
+Les dépendances sont tenues à jour par [Renovate](https://docs.renovatebot.com/), avec la configuration partagée de Forge-Apk (`renovate.json`).
 
 ## Permissions
 
 | Permission | Usage |
 |---|---|
-| `INTERNET` | Annuaire Radio Browser et flux audio |
+| `INTERNET` | Annuaire Radio Browser, flux audio, logos et pochettes |
+| `ACCESS_NETWORK_STATE` | Reprendre la lecture au retour du réseau après une coupure |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Lecture en arrière-plan |
 | `WAKE_LOCK` | Garder la connexion réseau active écran éteint |
 | `POST_NOTIFICATIONS` | Notification de lecture (Android 13+) |
@@ -153,10 +156,12 @@ Le trafic HTTP non chiffré est autorisé, car beaucoup de flux radio ne sont pa
 
 ## Limites connues
 
-- Pas de réorganisation des favoris : ils apparaissent dans l'ordre d'ajout.
-- Les logos sont gardés en mémoire seulement le temps de la session. Les formats SVG et ICO ne s'affichent pas.
-- Une station relancée depuis la notification, si elle n'apparaît dans aucune liste, ne peut pas être ajoutée aux favoris depuis le lecteur.
+- Les logos et pochettes sont gardés en mémoire seulement le temps de la session (pas de cache disque).
+- Désinstaller l'application efface les favoris : pas encore d'export / import.
+- Pas de minuteur de sommeil ni d'historique des stations écoutées (voir [ROADMAP.md](ROADMAP.md)).
 
 ## Crédits
 
 Données des stations : [Radio Browser](https://www.radio-browser.info/), annuaire communautaire et libre. L'application signale chaque écoute à l'API, comme celle-ci le demande, pour améliorer le classement des stations.
+
+Pochettes des morceaux : [iTunes Search API](https://performance-partners.apple.com/search-api) d'Apple.
